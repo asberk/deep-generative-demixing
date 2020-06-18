@@ -12,7 +12,12 @@ from torch import nn
 
 class SimpleVAE(nn.Module):
     def __init__(
-        self, in_features, hidden_features, latent_features, device=None
+        self,
+        in_features,
+        hidden_features,
+        latent_features,
+        dropout_probability=0.4,
+        device=None,
     ):
         """
         VariationalAutoEncoder(in_features, hidden_features)
@@ -32,7 +37,15 @@ class SimpleVAE(nn.Module):
             "cuda" if torch.cuda.is_available() else "cpu"
         )
 
+        self._args = (
+            in_features,
+            hidden_features,
+            latent_features,
+            dropout_probability,
+            device,
+        )
         self.in_features = in_features
+        self.dropout_probability = dropout_probability
         self.fc1 = nn.Linear(in_features, hidden_features)
         self.fc21 = nn.Linear(hidden_features, latent_features)
         self.fc22 = nn.Linear(hidden_features, latent_features)
@@ -40,7 +53,11 @@ class SimpleVAE(nn.Module):
         self.fc4 = nn.Linear(hidden_features, in_features)
 
     def encode(self, input):
-        h1 = torch.relu(self.fc1(input))
+        dropout = lambda x: nn.functional.dropout(
+            x, self.dropout_probability, self.training
+        )
+
+        h1 = dropout(torch.relu(self.fc1(input)))
         mu, log_var = self.fc21(h1), self.fc22(h1)
         return mu, log_var
 
@@ -53,7 +70,10 @@ class SimpleVAE(nn.Module):
             return mu
 
     def decode(self, z):
-        h3 = torch.relu(self.fc3(z))
+        dropout = lambda x: nn.functional.dropout(
+            x, self.dropout_probability, self.training
+        )
+        h3 = dropout(torch.relu(self.fc3(z)))
         out = torch.sigmoid(self.fc4(h3))
         return out
 
@@ -63,5 +83,104 @@ class SimpleVAE(nn.Module):
         out = self.decode(z)
         return out, mu, log_var
 
+
+class FullyConnectedVAE(nn.Module):
+    def __init__(
+        self,
+        in_features,
+        hidden_features,
+        num_layers,
+        latent_features,
+        dropout_probability=0.4,
+        device=None,
+    ):
+        """
+        FullyConnectedVAE(
+            in_features,
+            hidden_features,
+            num_layers,
+            latent_features,
+            dropout_probability=0.4,
+            device=None,
+        )
+        """
+        super().__init__()
+
+        self.device = torch.device(
+            "cuda" if torch.cuda.is_available() else "cpu"
+        )
+
+        self._args = (
+            in_features,
+            hidden_features,
+            num_layers,
+            latent_features,
+            dropout_probability,
+            device,
+        )
+        self.in_features = in_features
+        self.hidden_features = hidden_features
+        self.num_layers = num_layers
+        self.latent_features = latent_features
+        self.dropout_probability = dropout_probability
+        self.fc1 = nn.Linear(in_features, hidden_features)
+        self.fc21 = nn.Linear(hidden_features, latent_features)
+        self.fc22 = nn.Linear(hidden_features, latent_features)
+        self.fc3 = nn.Linear(latent_features, hidden_features)
+        self.fc4 = nn.Linear(hidden_features, in_features)
+
+        if num_layers > 2:
+            self.enc_layers = nn.ModuleList(
+                [
+                    nn.Linear(hidden_features, hidden_features)
+                    for _ in range(num_layers - 2)
+                ]
+            )
+            self.dec_layers = nn.ModuleList(
+                [
+                    nn.Linear(hidden_features, hidden_features)
+                    for _ in range(num_layers - 2)
+                ]
+            )
+
+    def encode(self, input):
+        dropout = lambda x: nn.functional.dropout(
+            x, self.dropout_probability, self.training
+        )
+
+        h1 = dropout(torch.relu(self.fc1(input)))
+        if self.num_layers > 2:
+            for layer in self.enc_layers:
+                h1 = dropout(torch.relu(layer(h1)))
+        mu, log_var = self.fc21(h1), self.fc22(h1)
+        return mu, log_var
+
+    def reparametrize(self, mu, log_var):
+        if self.training:
+            std = torch.exp(0.5 * log_var)
+            eps = torch.randn_like(std)
+            return eps.mul(std).add_(mu)
+        else:
+            return mu
+
+    def decode(self, z):
+        dropout = lambda x: nn.functional.dropout(
+            x, self.dropout_probability, self.training
+        )
+        h3 = dropout(torch.relu(self.fc3(z)))
+        if self.num_layers > 2:
+            for layer in self.dec_layers:
+                h3 = dropout(torch.relu(layer(h3)))
+        out = torch.sigmoid(self.fc4(h3))
+        return out
+
+    def forward(self, input):
+        mu, log_var = self.encode(input.view(-1, self.in_features))
+        z = self.reparametrize(mu, log_var)
+        out = self.decode(z)
+        return out, mu, log_var
+
+
+networks = {"SimpleVAE": SimpleVAE, "FullyConnectedVAE": FullyConnectedVAE}
 
 # # model.py ends here

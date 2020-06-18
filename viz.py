@@ -12,6 +12,7 @@ from datetime import datetime
 import numpy as np
 import matplotlib.pyplot as plt
 
+import torch
 from torchvision.utils import save_image
 
 from util import get_tstamp
@@ -35,14 +36,28 @@ def plot_random_images(dataset, k=8, nr=2, figsize=None):
     return
 
 
-def create_save_image_callback(save_dir=None, fname_pattern=None):
+def create_save_image_callback(
+    save_dir=None, fname_pattern=None, unflatten=None
+):
     if save_dir is None:
         save_dir = "./fig/"
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
 
     if fname_pattern is None:
-        fname_pattern = "{img_type}{epoch}{phase}_{tstamp}.jpg"
+        fname_pattern = "img{epoch}{phase}_{tstamp}.jpg"
+
+    if (unflatten is None) or (unflatten is False):
+        pass
+    else:
+        if isinstance(unflatten, np.int):
+            unflatten = (unflatten, unflatten)
+        assert isinstance(unflatten, (tuple, list))
+        if len(unflatten) == 2:
+            unflatten = (1, *unflatten)
+        assert (
+            len(unflatten) == 3
+        ), f"Expected unflatten to be a tuple of length 2 or 3."
 
     def save_image_callback(engine, epoch=None):
         Xr, Xb, *_ = engine.state.output
@@ -50,26 +65,16 @@ def create_save_image_callback(save_dir=None, fname_pattern=None):
         phase = engine.state.__dict__.get("phase", None)
         epoch_tag = f"_{epoch()}" if callable(epoch) else ""
         phase_tag = f"_{phase}" if isinstance(phase, str) else ""
-        recon_fpath = os.path.join(
+        fpath = os.path.join(
             save_dir,
             fname_pattern.format(
-                img_type="recon",
-                epoch=epoch_tag,
-                phase=phase_tag,
-                tstamp=tstamp,
+                epoch=epoch_tag, phase=phase_tag, tstamp=tstamp,
             ),
         )
-        batch_fpath = os.path.join(
-            save_dir,
-            fname_pattern.format(
-                img_type="batch",
-                epoch=epoch_tag,
-                phase=phase_tag,
-                tstamp=tstamp,
-            ),
-        )
-        save_image(Xr, recon_fpath)
-        save_image(Xb, batch_fpath)
+        Xrb = torch.cat((Xr, Xb), dim=0)
+        if isinstance(unflatten, (tuple, list)):
+            Xrb = Xrb.view(Xrb.size(0), *unflatten)
+        save_image(Xrb, fpath)
         return
 
     return save_image_callback

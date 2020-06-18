@@ -48,3 +48,20 @@ def get_tstamp():
         .replace(".", "-")
     )
     return tstamp
+
+
+def save_args(args, fpath=None):
+    import csv
+
+    if fpath is None:
+        fpath = f"./log/args_{get_tstamp()}.csv"
+
+    argdict = args.__dict__
+    col_names = list(argdict.keys())
+    try:
+        with open(fpath, "w") as csvfile:
+            writer = csv.DictWriter(csvfile, fieldnames=col_names)
+            writer.writeheader()
+            writer.writerow(argdict)
+    except IOError as ioe:
+        print(f"IOError: {ioe}")

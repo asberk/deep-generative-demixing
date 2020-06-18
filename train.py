@@ -8,10 +8,13 @@ Copyright © 2020, Aaron Berk, all rights reserved.
 Created: 15 June 2020
 
 """
+import pdb
+import logging
 import torch
+from torch import optim
 import torch.nn.functional as F
 from ignite.engine import Engine, Events, _prepare_batch
-from ignite.metrics import Loss  # , Accuracy
+from ignite.metrics import Loss, MeanSquaredError
 
 # from ignite.handlers import ModelCheckpoint
 
@@ -19,11 +22,17 @@ from viz import create_save_image_callback
 from util import Logger
 
 
-def get_autoencoder_loss():
+def get_default_autoencoder_loss(lamda=None):
+    if lamda is None:
+        lamda = 1.0
+
     def loss_fn(x_recon, x_true, mu, log_var):
-        BCE = F.binary_cross_entropy(x_recon, x_true, size_average=False)
+        try:
+            BCE = F.binary_cross_entropy(x_recon, x_true, reduction="mean")
+        except RuntimeError:
+            pdb.set_trace()
         KLD = -0.5 * torch.sum(1 + log_var - mu.pow(2) - log_var.exp())
-        return BCE + KLD
+        return BCE + lamda * KLD
 
     return loss_fn
 
@@ -37,8 +46,11 @@ def create_autoencoder_evaluator(eval_step, metrics=None):
     return evaluator
 
 
-def loss_eval_output_transform(Xr, Xb, yb, mu, log_var):
-    return Xr, Xb, mu, log_var
+def loss_eval_output_transform(output):
+    Xr, Xb, yb, mu, log_var = output
+    ret = (Xr, Xb, {"mu": mu, "log_var": log_var})
+    # pdb.set_trace()
+    return ret
 
 
 def create_log_handler(trainer):
@@ -49,7 +61,7 @@ def create_log_handler(trainer):
             f"Epoch {trainer.state.epoch} {phase} loss: {engine.state.metrics['loss']}"
         )
         for metric_name, metric_value in engine.state.metrics.items():
-            logger.log(f"{phase}_{metric_name}", metric_value)
+            logger(f"{phase}_{metric_name}", metric_value)
 
     return log_metrics, logger
 
@@ -62,11 +74,12 @@ def create_autoencoder_engines(
     device=None,
     non_blocking=False,
     fig_dir=None,
+    unflatten=None,
 ):
 
     device = model.device
     if criterion is None:
-        criterion = get_autoencoder_loss()
+        criterion = get_default_autoencoder_loss()
 
     def train_step(engine, batch):
         model.train()
@@ -91,10 +104,15 @@ def create_autoencoder_engines(
     metrics.setdefault(
         "loss", Loss(criterion, output_transform=loss_eval_output_transform),
     )
+    metrics.setdefault(
+        "mse", MeanSquaredError(output_transform=lambda x: x[:2])
+    )
     trainer = Engine(train_step)
     evaluator = create_autoencoder_evaluator(eval_step, metrics=metrics)
 
-    save_image_callback = create_save_image_callback(fig_dir)
+    save_image_callback = create_save_image_callback(
+        fig_dir, unflatten=unflatten
+    )
 
     def _epoch_getter():
         return trainer.state.__dict__.get("epoch", None)
@@ -133,5 +151,8 @@ def add_evaluation(trainer, evaluator, log_handler, val_loaders):
 
     return trainer
 
+
+criteria = {"default": get_default_autoencoder_loss}
+optimizers = {"SGD": optim.SGD, "Adam": optim.Adam}
 
 # # train.py ends here

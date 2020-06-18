@@ -7,17 +7,35 @@ Author: Aaron Berk <aberk@math.ubc.ca>
 Copyright © 2020, Aaron Berk, all rights reserved.
 Created: 15 June 2020
 """
+import os
+from argparse import Namespace
 import numpy as np
-import torch
-from torch import optim
 
-from data import basic_1_8_setup
-from model import SimpleVAE
+from data import load_data_fns
+from model import networks
+from opt_utils import create_lr_finder
 import train
-from viz import plot_random_images
+from util import get_tstamp, save_args
 
+# from viz import plot_random_images
 
-datasets, dataloaders = basic_1_8_setup()
+args = Namespace(
+    data="basic_1_8_setup",
+    network="FullyConnectedVAE",
+    network_kwargs={
+        "hidden_features": 128,
+        "num_layers": 4,
+        "latent_features": 128,
+        "dropout_probability": 0.25,
+    },
+    criterion="default",
+    criterion_kwargs={"lamda": 0.01},
+    optim_fn="SGD",
+    optim_fn_kwargs={"lr": None, "momentum": 0.9, "weight_decay": 1e-3},
+    max_epochs=25,
+)
+
+datasets, dataloaders = load_data_fns[args.data]()
 # plot_random_images(dset_18_test, k=32, nr=4)
 
 val_loaders = {
@@ -32,23 +50,58 @@ in_features = np.prod(img_shape)
 hidden_features = 5
 latent_features = 3
 
-model = SimpleVAE(in_features, hidden_features, latent_features)
-optimizer = optim.SGD(
-    model.parameters(), lr=1e-3, momentum=0.9, weight_decay=1e-3
+model = networks[args.network](in_features, **args.network_kwargs)
+criterion = train.criteria[args.criterion](**args.criterion_kwargs)
+optim_fn = train.optimizers[args.optim_fn]
+optim_fn_kwargs = args.optim_fn_kwargs
+
+find_lr = create_lr_finder(
+    model, criterion, optim_fn, optim_fn_kwargs=optim_fn_kwargs,
 )
 
-(
-    trainer,
-    evaluator,
-    val_log_handler,
-    val_logger,
-) = train.create_autoencoder_engines(model, optimizer)
-trainer = train.add_evaluation(trainer, evaluator, val_log_handler, val_loaders)
+tstamp = get_tstamp()
+log_path = f"./log/{tstamp}/"
+plot_path = log_path
+find_lr_path = os.path.join(plot_path, "find_lr")
+find_lr_fpath = os.path.join(find_lr_path, f"find_lr_{tstamp}.pdf")
+eval_img_path = os.path.join(plot_path, "eval_img")
 
 
 if __name__ == "__main__":
 
-    trainer.run(train_loader, max_epochs=2)
+    if not os.path.exists(log_path):
+        os.makedirs(log_path)
+    if not os.path.exists(plot_path):
+        os.makedirs(plot_path)
+    if not os.path.exists(find_lr_path):
+        os.makedirs(find_lr_path)
 
+    if optim_fn_kwargs.get("lr", None) is None:
+        lr_star = find_lr(train_loader, plot_fpath=find_lr_fpath)
+        print("lr_star", lr_star)
+        args.optim_fn_kwargs["lr"] = lr_star
+        optim_fn_kwargs["lr"] = lr_star
+        assert (
+            lr_star > 1e-5
+        ), f"Something went wrong with auto lr finding: {lr_star}"
+
+    optimizer = optim_fn(model.parameters(), **optim_fn_kwargs)
+
+    (
+        trainer,
+        evaluator,
+        val_log_handler,
+        val_logger,
+    ) = train.create_autoencoder_engines(
+        model, optimizer, fig_dir=eval_img_path, unflatten=(1, 28, 28)
+    )
+    trainer = train.add_evaluation(
+        trainer, evaluator, val_log_handler, val_loaders
+    )
+
+    trainer.run(train_loader, max_epochs=args.max_epochs)
+
+    val_logger.save(os.path.join(log_path, "val_log.csv"))
+    save_args(args, os.path.join(log_path, "args.csv"))
 
 # # deep-generative-demixing.py ends here

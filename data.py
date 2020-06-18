@@ -103,13 +103,14 @@ def get_partitioned_datasets(
         ret["train"] = train_set
 
     if "train_eval" in phases:
+        train_size = len(train_set)
         train_eval_size = _size_helper(
-            train_eval_size, dev_size, "train_eval_size", 0.5
+            train_eval_size, train_size, "train_eval_size", 0.5
         )
         train_eval_indices = np.random.choice(
             train_indices, size=train_eval_size, replace=False
         )
-        train_eval_set = Subset(train_set, train_eval_indices)
+        train_eval_set = Subset(dset_dev, train_eval_indices)
         ret["train_eval"] = train_eval_set
 
     return ret
@@ -168,3 +169,6 @@ def basic_1_8_setup():
     datasets = get_partitioned_datasets(dset_dev, dset_ho)
     dataloaders = get_dataloaders(datasets)
     return datasets, dataloaders
+
+
+load_data_fns = {"basic_1_8_setup": basic_1_8_setup}
