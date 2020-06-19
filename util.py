@@ -1,3 +1,4 @@
+import os
 import re
 from datetime import datetime
 from collections import defaultdict
@@ -65,3 +66,23 @@ def save_args(args, fpath=None):
             writer.writerow(argdict)
     except IOError as ioe:
         print(f"IOError: {ioe}")
+
+
+def user_input_lr(lr_star, threshold=1e-5):
+    if lr_star >= threshold:
+        return
+    if os.uname().nodename != "grimpoteuthis":
+        if lr_star < threshold ** 2:
+            raise RuntimeError(
+                f"lr_star = {lr_star} < {threshold**2}. Stopping."
+            )
+        return
+    response = "x"
+    while response.lower() not in "yn":
+        response = input(
+            f"lr_star = {lr_star} < {threshold}. Continue anyway? (y/n) "
+        ).lower()
+        if response == "n":
+            raise RuntimeError("Stopping. lr < 1e-5.")
+        elif response == "y":
+            break
