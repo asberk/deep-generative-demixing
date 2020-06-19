@@ -28,7 +28,7 @@ def get_default_autoencoder_loss(lamda=None):
 
     def loss_fn(x_recon, x_true, mu, log_var):
         try:
-            BCE = F.binary_cross_entropy(x_recon, x_true, reduction="mean")
+            BCE = F.binary_cross_entropy(x_recon, x_true, reduction="sum")
         except RuntimeError:
             pdb.set_trace()
         KLD = -0.5 * torch.sum(1 + log_var - mu.pow(2) - log_var.exp())
