@@ -119,11 +119,21 @@ def get_partitioned_datasets(
 def _parse_batch_size_shuffle(batch_size, shuffle):
     if batch_size is None:
         batch_size = {}
-    batch_size.setdefault("train", 16)
+    elif isinstance(batch_size, np.int):
+        batch_size = {"train": batch_size}
+    assert isinstance(
+        batch_size, dict
+    ), f"Expected dict for batch_size but found {batch_size}."
+    batch_size.setdefault("train", 128)
     for phase in ["train_eval", "val", "test"]:
         batch_size.setdefault(phase, 128)
     if shuffle is None:
         shuffle = {}
+    elif isinstance(shuffle, bool):
+        shuffle = {"train": shuffle}
+    assert isinstance(
+        shuffle, dict
+    ), f"Expected dict for shuffle but found {shuffle}."
     shuffle.setdefault("train", True)
     for phase in ["train_eval", "val", "test"]:
         shuffle.setdefault(phase, False)
@@ -145,7 +155,7 @@ def get_dataloaders(datasets, batch_size=None, shuffle=None):
     return loaders
 
 
-def basic_1_8_setup():
+def basic_1_8_setup(ravel=True, batch_size=128):
     """
     basic_1_8_setup()
 
@@ -160,14 +170,17 @@ def basic_1_8_setup():
         batch_size: {"train" : 16, "train_eval": 128, "val": 128, "test": 128}
         shuffle: {"train" : True, "train_eval": False, "val": False, "test": False}
     """
-    on_load_transform = transforms.Compose(
-        [transforms.ToTensor(), transforms.Lambda(lambda x: x.view(-1))]
-    )
+    if ravel:
+        on_load_transform = transforms.Compose(
+            [transforms.ToTensor(), transforms.Lambda(lambda x: x.view(-1))]
+        )
+    else:
+        on_load_transform = transforms.ToTensor()
     dset_dev, dset_ho = load_mnist_datasets(
         transform=on_load_transform, classes=[1, 8]
     )
     datasets = get_partitioned_datasets(dset_dev, dset_ho)
-    dataloaders = get_dataloaders(datasets)
+    dataloaders = get_dataloaders(datasets, batch_size=batch_size)
     return datasets, dataloaders
 
 
