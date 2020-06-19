@@ -15,7 +15,7 @@ from data import load_data_fns
 from model import networks
 from opt_utils import create_lr_finder
 import train
-from util import get_tstamp, save_args, user_input_lr
+from util import get_tstamp, save_args, save_model, user_input_lr
 
 # from viz import plot_random_images
 
@@ -66,6 +66,7 @@ plot_path = log_path
 find_lr_path = os.path.join(plot_path, "find_lr")
 find_lr_fpath = os.path.join(find_lr_path, f"find_lr_{tstamp}.pdf")
 eval_img_path = os.path.join(plot_path, "eval_img")
+chkpt_path = os.path.join(log_path, "chkpt")
 
 
 if __name__ == "__main__":
@@ -76,6 +77,8 @@ if __name__ == "__main__":
         os.makedirs(plot_path)
     if not os.path.exists(find_lr_path):
         os.makedirs(find_lr_path)
+    if not os.path.exists(chkpt_path):
+        os.makedirs(chkpt_path)
 
     if optim_fn_kwargs.get("lr", None) is None:
         lr_star = find_lr(train_loader, plot_fpath=find_lr_fpath)
@@ -104,5 +107,16 @@ if __name__ == "__main__":
         args.data_kwargs["batch_size"] = dataloaders["train"].batch_size
     val_logger.save(os.path.join(log_path, "val_log.csv"))
     save_args(args, os.path.join(log_path, "args.csv"))
+
+    save_model(
+        model,
+        model._get_name(),
+        epoch=args.max_epochs,
+        score_name="val_loss",
+        score_value=val_logger.log["val_loss"][-1],
+        tstamp=tstamp,
+        save_dir=chkpt_path,
+    )
+
 
 # # deep-generative-demixing.py ends here
