@@ -15,24 +15,25 @@ from data import load_data_fns
 from model import networks
 from opt_utils import create_lr_finder
 import train
-from util import get_tstamp, save_args
+from util import get_tstamp, save_args, user_input_lr
 
 # from viz import plot_random_images
 
 args = Namespace(
     data="basic_1_8_setup",
-    network="FullyConnectedVAE",
+    data_kwargs={"ravel": True, "batch_size": 128},
+    network="SimpleVAE",
     network_kwargs={
-        "hidden_features": 128,
-        "num_layers": 4,
-        "latent_features": 128,
-        "dropout_probability": 0.25,
+        "hidden_features": 256,
+        # "num_layers": 4,
+        "latent_features": 16,
+        "dropout_probability": 0.3,
     },
     criterion="default",
-    criterion_kwargs={"lamda": 0.01},
+    criterion_kwargs={"lamda": 1.0},
     optim_fn="SGD",
     optim_fn_kwargs={"lr": None, "momentum": 0.9, "weight_decay": 1e-3},
-    max_epochs=25,
+    max_epochs=200,
 )
 
 datasets, dataloaders = load_data_fns[args.data]()
@@ -81,9 +82,7 @@ if __name__ == "__main__":
         print("lr_star", lr_star)
         args.optim_fn_kwargs["lr"] = lr_star
         optim_fn_kwargs["lr"] = lr_star
-        assert (
-            lr_star > 1e-5
-        ), f"Something went wrong with auto lr finding: {lr_star}"
+        user_input_lr(lr_star)
 
     optimizer = optim_fn(model.parameters(), **optim_fn_kwargs)
 
@@ -101,6 +100,8 @@ if __name__ == "__main__":
 
     trainer.run(train_loader, max_epochs=args.max_epochs)
 
+    if args.data_kwargs.get("batch_size", None) is None:
+        args.data_kwargs["batch_size"] = dataloaders["train"].batch_size
     val_logger.save(os.path.join(log_path, "val_log.csv"))
     save_args(args, os.path.join(log_path, "args.csv"))
 
