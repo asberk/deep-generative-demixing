@@ -61,12 +61,7 @@ batch_size = args.data_kwargs["batch_size"]
 
 optimizer = optim_fn(model.parameters(), **optim_fn_kwargs)
 
-(
-    trainer,
-    evaluator,
-    val_log_handler,
-    val_logger,
-) = train.create_conditional_autoencoder_engines(
+trainer, evaluator, val_log_handler, val_logger = train.create_cvae_engines(
     model,
     optimizer,
     fig_dir=eval_img_path,

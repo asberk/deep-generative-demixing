@@ -89,7 +89,7 @@ if __name__ == "__main__":
         evaluator,
         val_log_handler,
         val_logger,
-    ) = train.create_autoencoder_engines(
+    ) = train.create_vae_engines(
         model, optimizer, fig_dir=eval_img_path, unflatten=(1, 28, 28)
     )
     trainer = train.add_evaluation(
