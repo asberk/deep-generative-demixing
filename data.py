@@ -28,6 +28,18 @@ class MNISTSubset(datasets.mnist.MNIST):
             indices = [i for i, n in enumerate(self.targets) if n in classes]
             self.targets = self.targets[indices]
             self.data = self.data[indices]
+            self._reset_classes(classes)
+
+    def _reset_classes(self, classes):
+        self.classes = [
+            entry for entry in self.classes if int(entry[0]) in classes
+        ]
+        class_2_idx = {
+            key: value
+            for key, value in self.class_to_idx.items()
+            if key in self.classes
+        }
+        self.class_2_idx = {key: i for i, key in enumerate(class_2_idx.keys())}
 
 
 def load_mnist_datasets(data_dir=None, transform=None, classes=None):
@@ -113,6 +125,13 @@ def get_partitioned_datasets(
         train_eval_set = Subset(dset_dev, train_eval_indices)
         ret["train_eval"] = train_eval_set
 
+    for key in ret.keys():
+        if isinstance(ret[key], Subset):
+            setattr(ret[key], "classes", ret[key].dataset.classes)
+            setattr(ret[key], "class_2_idx", ret[key].dataset.class_2_idx)
+            setattr(ret[key], "data", ret[key].dataset.data)
+            setattr(ret[key], "targets", ret[key].dataset.targets)
+
     return ret
 
 
@@ -181,7 +200,9 @@ def basic_1_8_setup(ravel=True, batch_size=128):
     )
     datasets = get_partitioned_datasets(dset_dev, dset_ho)
     dataloaders = get_dataloaders(datasets, batch_size=batch_size)
-    return datasets, dataloaders
+    img_shape = datasets["train"][0][0].size()
+    classes = datasets["train"].targets.unique()
+    return dataloaders, img_shape, classes
 
 
 load_data_fns = {"basic_1_8_setup": basic_1_8_setup}

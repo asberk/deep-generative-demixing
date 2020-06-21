@@ -4,6 +4,7 @@ from collections import defaultdict
 import numpy as np
 import pandas as pd
 import torch
+from torch import nn
 
 
 class Logger:
@@ -109,6 +110,53 @@ def save_model(
     return
 
 
+def search_for_models(
+    fpattern=None, directory=None, extension=".pth", recursive=True
+):
+    from glob import glob
+
+    if directory is None:
+        directory = "./log/"
+    if fpattern is None:
+        fpattern = "*"
+    if recursive:
+        recursive = "**"
+    else:
+        recursive = ""
+
+    search_pattern = os.path.join(directory, recursive, fpattern + extension)
+    found_files = glob(search_pattern, recursive=True)
+    print(f"Found {len(found_files)} matches.")
+    return found_files
+
+
+def load_model(network: nn.Module, fpath, device=None):
+    if device is None:
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    result = network.load_state_dict(torch.load(fpath, map_location=device))
+    print(result)
+    return network
+
+
+def load_saved_model_by_tstamp(tstamp, in_features, device=None):
+    from model import networks
+
+    directory = os.path.join("./log", tstamp)
+    model_list = search_for_models(directory=directory)
+    if len(model_list) > 1:
+        print("Warning: found more than one model. Loading first.")
+    args_fpath = os.path.join(directory, "args.csv")
+    args_df = pd.read_csv(args_fpath)
+    network_name = args_df.network[0]
+    network_kwargs = eval(args_df.network_kwargs[0])
+    assert isinstance(
+        network_kwargs, dict
+    ), f"Error loading network_kwargs from {args_fpath}"
+    network = networks[network_name](in_features=in_features, **network_kwargs)
+    network = load_model(network, model_list[0], device=device)
+    return network
+
+
 def save_args(args, fpath=None):
     import csv
 
@@ -144,3 +192,22 @@ def user_input_lr(lr_star, threshold=1e-5):
             raise RuntimeError("Stopping. lr < 1e-5.")
         elif response == "y":
             break
+
+
+def create_yb_to_one_hot(batch_size, classes):
+
+    class_to_idx = {cls.item(): idx for idx, cls in enumerate(classes)}
+    num_classes = len(classes)
+    y_one_hot = torch.FloatTensor(batch_size, num_classes).zero_()
+
+    def yb_to_one_hot(yb):
+        indices = (
+            torch.tensor([class_to_idx[cls.item()] for cls in yb])
+            .long()
+            .view(-1, 1)
+        )
+        y_one_hot.zero_()
+        y_one_hot.scatter_(1, indices, 1)
+        return y_one_hot
+
+    return yb_to_one_hot
