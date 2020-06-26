@@ -204,15 +204,28 @@ def demixing_problem(
 
     criterion = nn.MSELoss()
     optimizer = optim.Adam([w0, w1], lr=1e-2)
+    logger = Logger()
 
     for i in range(num_iter):
         demixed0 = model.decode(w0)
         demixed1 = model.decode(w1)
         optimizer.zero_grad()
-        loss = criterion(demixed0 + demixed1, mixture)
+        mixture_pred = (demixed0 + demixed1).squeeze()
+        loss = criterion(mixture_pred, mixture)
+        logger("iter", i)
+        logger("loss", loss.item())
         loss.backward()
         optimizer.step()
-    return demixed0, w0, demixed1, w1, mixture, mixture_encoding, optimizer
+    return (
+        demixed0,
+        w0,
+        demixed1,
+        w1,
+        mixture,
+        mixture_encoding,
+        optimizer,
+        logger,
+    )
 
 
 def multi_demixing_problem(
@@ -297,11 +310,28 @@ def simple_demixing_example(num_iter=1000, clamp=True, seed=2020):
         mixture,
         mixture_encoding,
         optimizer,
+        logger,
     ) = demixing_problem(model, *images_, num_iter=num_iter, clamp=clamp)
 
     _plot_images(*images_, mixture, demixed0, demixed1)
 
-    return
+    history = logger.to_df()
+
+    results = {
+        "tstamp": tstamp,
+        "args_df": args_df,
+        "model": model,
+        "dataloaders": dataloaders,
+        "images": images,
+        "demixed": [demixed0, demixed1],
+        "Wi": [w0, w1],
+        "mixture": mixture,
+        "mixture_encoding": mixture_encoding,
+        "optimizer": optimizer,
+        "history": history,
+    }
+
+    return results
 
 
 def three_class_demixing_example(num_iter=2000, clamp=True, seed=2020):
@@ -375,7 +405,8 @@ def default_interpolation_example():
 
 if __name__ == "__main__":
 
-    results = three_class_demixing_example()
+    results = simple_demixing_example(num_iter=100)
+    # results = three_class_demixing_example()
 
 
 # # explore_trained_generator.py ends here
