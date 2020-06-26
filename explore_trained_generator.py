@@ -163,7 +163,7 @@ def demixing_problem(
     if (Q is not None) and isinstance(Q, torch.Tensor):
         mixture = x0 + torch.matmul(Q, x1.view(-1, 1)).view(*x1_shape)
     else:
-        mixture = x0 + x1
+        mixture = (x0 + x1).clamp(0, 1)
 
     if clamp:
         mixture.clamp_(0.0, 1.0)
@@ -230,7 +230,7 @@ if __name__ == "__main__":
     #     interpolation_plot_fpath,
     # )
 
-    x0, x1 = get_two_images_from_dataloader(dataloaders["train"])
+    x0, x1 = get_two_images_from_dataloader(dataloaders["test"])
     (
         demixed0,
         w0,
