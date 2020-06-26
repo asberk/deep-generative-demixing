@@ -128,6 +128,8 @@ def create_lr_finder(
         }
     if device is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    new_model = new_model.to(device)
     optimizer = optim_fn(new_model.parameters(), lr=lr_init, **optim_fn_kwargs)
 
     lr_finder = create_engine(
