@@ -17,7 +17,7 @@ import torch
 from torch import nn, optim
 
 from data import load_data_fns
-from util import load_saved_model_by_tstamp
+from util import load_saved_model_by_tstamp, Logger
 
 
 def load_a_trained_model_with_data(tstamp=None):
@@ -117,21 +117,26 @@ def interpolation_example(
     return
 
 
-def get_two_images_from_dataloader(dataloader):
+def get_n_images_from_dataloader(dataloader, classes, seed=None):
     dset = dataloader.dataset
     length = len(dset)
-    for i in range(length):
-        sample0 = dset[i]
-        if sample0[1] == 1:
-            break
-    if i > 0:
-        sample1 = dset[i - 1]
-        return sample0[0], sample1[0]
-    for i in range(length):
-        sample1 = dset[i]
-        if sample1[1] == 8:
-            return sample0[0], sample1[0]
-    raise RuntimeError("Could not find a pair of samples labelled 1 and 8.")
+    if seed is not None:
+        np.random.seed(seed)
+    if isinstance(classes, torch.Tensor):
+        classes = classes.detach().cpu().numpy()
+    indices = np.random.choice(length, size=length, replace=False)
+    images = {}
+    for i in indices:
+        sample = dset[i]
+        image, label = sample
+        if (label in classes) and (images.get(label, None) is None):
+            images[label] = image
+        if len(images) == classes.size:
+            return images
+    raise RuntimeError(
+        f"Could not find an image for each label in classes. "
+        f"Found only: {tuple(images.keys())}."
+    )
 
 
 def _plot_images(*images):
@@ -163,7 +168,7 @@ def demixing_problem(
     if (Q is not None) and isinstance(Q, torch.Tensor):
         mixture = x0 + torch.matmul(Q, x1.view(-1, 1)).view(*x1_shape)
     else:
-        mixture = (x0 + x1).clamp(0, 1)
+        mixture = x0 + x1
 
     if clamp:
         mixture.clamp_(0.0, 1.0)
@@ -210,7 +215,66 @@ def demixing_problem(
     return demixed0, w0, demixed1, w1, mixture, mixture_encoding, optimizer
 
 
-if __name__ == "__main__":
+def multi_demixing_problem(
+    model: nn.Module, images: dict, num_iter=1000, clamp=True, verbose=True
+):
+
+    img_shapes = [img.shape for img in images.values()]
+    assert all(
+        shape0 == shape1
+        for i, shape0 in enumerate(img_shapes)
+        for shape1 in img_shapes[i:]
+    ), f"Shape mismatch."
+
+    mixture = torch.stack(tuple(images.values()), dim=0).sum(dim=0)
+
+    if clamp:
+        mixture.clamp_(0.0, 1.0)
+
+    model.eval()
+
+    mixture_params = model.encode(mixture.view(1, -1))
+    mixture_encoding = model.reparametrize(*mixture_params)
+
+    # Set requires_grad = False for all model parameters.
+    model.requires_grad_(False)
+
+    # For encoding vectors w0 and w1, set requires_grad = True.
+
+    Wi = [
+        mixture_encoding.clone()
+        .detach()
+        .add_(torch.randn_like(mixture_encoding), alpha=0.1)
+        .requires_grad_(True)
+        for _ in range(len(images))
+    ]
+
+    # Acquire im0 = model.decode(w0), im1 = model.decode(w1)
+    #   and compute loss = norm(y - im0 - im1, 2)**2 where
+    #   w0.requires_grad = True and w1.requires_grad = True.
+    # Then after we call loss.backward, we should have updates for
+    #   w0 and w1. Just gotta' pass w0 and w1 to the optimizer.
+
+    criterion = nn.MSELoss()
+    optimizer = optim.Adam(Wi, lr=1e-2)
+    logger = Logger()
+
+    for i in range(num_iter):
+        demixed = [model.decode(w) for w in Wi]
+        optimizer.zero_grad()
+        mixture_pred = torch.stack(demixed, dim=0).sum(dim=0).squeeze()
+        loss = criterion(mixture_pred, mixture)
+        logger("iter", i)
+        logger("loss", loss.item())
+        if verbose and ((i % 100) == 0):
+            i_string = f"{i}"
+            print(f"iter {i_string:5s} loss {loss.item():.4f}")
+        loss.backward()
+        optimizer.step()
+    return demixed, Wi, mixture, mixture_encoding, optimizer, logger
+
+
+def simple_demixing_example(num_iter=1000, clamp=True, seed=2020):
     (
         tstamp,
         args_df,
@@ -220,17 +284,11 @@ if __name__ == "__main__":
         classes,
     ) = load_a_trained_model_with_data()
 
-    # fig_dir = os.path.join("./fig/", tstamp)
-    # encoding_plot_fpath = os.path.join(fig_dir, "encoding_plot.pdf")
-    # interpolation_plot_fpath = os.path.join(fig_dir, "interpolation_plot.pdf")
-    # interpolation_example(
-    #     dataloaders["train"],
-    #     model,
-    #     encoding_plot_fpath,
-    #     interpolation_plot_fpath,
-    # )
+    images = get_n_images_from_dataloader(
+        dataloaders["test"], classes, seed=seed
+    )
+    images_ = list(images.values())
 
-    x0, x1 = get_two_images_from_dataloader(dataloaders["test"])
     (
         demixed0,
         w0,
@@ -239,9 +297,85 @@ if __name__ == "__main__":
         mixture,
         mixture_encoding,
         optimizer,
-    ) = demixing_problem(model, x0, x1, clamp=True)
+    ) = demixing_problem(model, *images_, num_iter=num_iter, clamp=clamp)
 
-    _plot_images(x0, x1, mixture, demixed0, demixed1)
+    _plot_images(*images_, mixture, demixed0, demixed1)
+
+    return
+
+
+def three_class_demixing_example(num_iter=2000, clamp=True, seed=2020):
+    tstamp = "20200626-140403-564632"
+    (
+        tstamp,
+        args_df,
+        model,
+        dataloaders,
+        img_shape,
+        classes,
+    ) = load_a_trained_model_with_data(tstamp)
+
+    images = get_n_images_from_dataloader(
+        dataloaders["test"], classes, seed=seed
+    )
+    multi_demix_output = multi_demixing_problem(
+        model, images, num_iter=num_iter, clamp=clamp
+    )
+    (
+        demixed,
+        Wi,
+        mixture,
+        mixture_encoding,
+        optimizer,
+        logger,
+    ) = multi_demix_output
+    history = logger.to_df()
+    print(history.head(5))
+    print()
+    print(history.tail(5))
+
+    _plot_images(*list(images.values()), mixture, *demixed)
+    results = {
+        "tstamp": tstamp,
+        "args_df": args_df,
+        "model": model,
+        "dataloaders": dataloaders,
+        "images": images,
+        "demixed": demixed,
+        "Wi": Wi,
+        "mixture": mixture,
+        "mixture_encoding": mixture_encoding,
+        "optimizer": optimizer,
+        "history": history,
+    }
+    return results
+
+
+def default_interpolation_example():
+    (
+        tstamp,
+        args_df,
+        model,
+        dataloaders,
+        img_shape,
+        classes,
+    ) = load_a_trained_model_with_data()
+
+    fig_dir = os.path.join("./fig/", tstamp)
+    encoding_plot_fpath = os.path.join(fig_dir, "encoding_plot.pdf")
+    interpolation_plot_fpath = os.path.join(fig_dir, "interpolation_plot.pdf")
+    interpolation_example(
+        dataloaders["test"],
+        model,
+        encoding_plot_fpath,
+        interpolation_plot_fpath,
+    )
+    return
+
+
+if __name__ == "__main__":
+
+    results = three_class_demixing_example()
 
 
 # # explore_trained_generator.py ends here
