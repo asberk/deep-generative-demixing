@@ -42,6 +42,41 @@ class MNISTSubset(datasets.mnist.MNIST):
         self.class_2_idx = {key: i for i, key in enumerate(class_2_idx.keys())}
 
 
+class FMNISTSubset(datasets.mnist.FashionMNIST):
+    def __init__(
+        self,
+        root,
+        train=True,
+        transform=None,
+        target_transform=None,
+        download=False,
+        classes=None,
+    ):
+        super().__init__(root, train, transform, target_transform, download)
+
+        if classes is not None:
+            if not isinstance(classes, (tuple, list)):
+                classes = [classes]
+
+            indices = [i for i, n in enumerate(self.targets) if n in classes]
+            self.targets = self.targets[indices]
+            self.data = self.data[indices]
+            self._reset_classes(classes)
+        else:
+            self.class_2_idx = {key: i for i, key in enumerate(self.classes)}
+
+    def _reset_classes(self, classes):
+        self.classes = [
+            entry for entry in self.classes if int(entry[0]) in classes
+        ]
+        class_2_idx = {
+            key: value
+            for key, value in self.class_to_idx.items()
+            if key in self.classes
+        }
+        self.class_2_idx = {key: i for i, key in enumerate(class_2_idx.keys())}
+
+
 def load_mnist_datasets(data_dir=None, transform=None, classes=None):
     if data_dir is None:
         data_dir = DATA_DIR
@@ -56,6 +91,29 @@ def load_mnist_datasets(data_dir=None, transform=None, classes=None):
         classes=classes,
     )
     dset_test = MNISTSubset(
+        data_dir,
+        train=False,
+        transform=transform,
+        download=True,
+        classes=classes,
+    )
+    return dset_train, dset_test
+
+
+def load_fmnist_datasets(data_dir=None, transform=None, classes=None):
+    if data_dir is None:
+        data_dir = DATA_DIR
+    if transform is None:
+        transform = transforms.ToTensor()
+
+    dset_train = FMNISTSubset(
+        data_dir,
+        train=True,
+        transform=transform,
+        download=True,
+        classes=classes,
+    )
+    dset_test = FMNISTSubset(
         data_dir,
         train=False,
         transform=transform,
@@ -236,7 +294,47 @@ def basic_1_2_3_setup(ravel=True, batch_size=128):
     return dataloaders, img_shape, classes
 
 
+def basic_fmnist_setup(ravel=False, batch_size=128):
+    """
+    basic_fmnist_setup(ravel=False, batch_size=128)
+
+    Returns fashion mnist dataloaders.
+
+    Parameters
+    ----------
+    ravel: bool
+        Whether to return images or images ravelled as vectors. 
+    batch_size: int
+        training batch_size.
+
+    Returns
+    -------
+    dataloaders : dict of torch.utils.data.DataLoader
+        With keys ['train', 'val', 'test']
+    in_channels: int
+        Should be equal to 1.
+    num_classes : int
+        Should be equal to 10.
+    """
+    if ravel:
+        on_load_transform = transforms.Compose(
+            [transforms.ToTensor(), transforms.Lambda(lambda x: x.view(-1))]
+        )
+    else:
+        on_load_transform = transforms.ToTensor()
+    datasets = load_fmnist_datasets(transform=on_load_transform)
+    num_classes = len(datasets[0].classes)
+    datasets = get_partitioned_datasets(
+        *datasets, phases=["train", "val", "test"]
+    )
+    dataloaders = get_dataloaders(datasets, batch_size=batch_size)
+    batch_img, batch_lab = next(dataloaders["train"].__iter__())
+    in_channels = batch_img.size(1)
+    return dataloaders, in_channels, num_classes
+
+
 load_data_fns = {
     "basic_1_8_setup": basic_1_8_setup,
     "basic_1_2_3_setup": basic_1_2_3_setup,
+    "basic_fmnist_setup": basic_fmnist_setup,
 }

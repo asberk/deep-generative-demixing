@@ -195,12 +195,45 @@ def user_input_lr(lr_star, threshold=1e-5):
 
 
 def create_yb_to_one_hot(batch_size, classes):
+    """
+    create_yb_to_one_hot(batch_size, classes)
 
+    Function that returns a function to generate one-hot encodings, using a
+    particular tensor in memory.
+
+    This method is more time and memory efficient than to_onehot, but
+    potentially more confusing to use?
+
+    Parameters
+    ----------
+    batch_size: int
+        Essentially, labels.size(0).
+    classes: torch.Tensor
+        The indices for each class.
+
+    Returns
+    -------
+    yb_to_one_hot : callable
+        Function that turns labels into labels_onehot
+    """
     class_to_idx = {cls.item(): idx for idx, cls in enumerate(classes)}
     num_classes = len(classes)
     y_one_hot = torch.FloatTensor(batch_size, num_classes).zero_()
 
     def yb_to_one_hot(yb):
+        """
+        yb_to_one_hot(yb)
+
+        Inputs
+        ------
+        yb : torch.Tensor
+            labels, with shape (-1,)
+
+        Returns
+        -------
+        y_one_hot : torch.Tensor
+            one hot labels with shape (-1, classes.size(0))
+        """
         indices = (
             torch.tensor([class_to_idx[cls.item()] for cls in yb])
             .long()
@@ -211,3 +244,28 @@ def create_yb_to_one_hot(batch_size, classes):
         return y_one_hot
 
     return yb_to_one_hot
+
+
+def to_onehot(labels, num_classes, device):
+    """
+    to_onehot(labels, num_classes, device)
+
+    converts labels to one hot encoding, generating new tensor.
+
+    Parameters
+    ----------
+    labels: torch.Tensor
+        The vector of labels with max entry <= num_classes-1
+    num_classes: int-like
+        The number of classes.
+    device: torch.device
+        No default this time.
+
+    Returns
+    -------
+    labels_onehot : torch.Tensor
+        Has shape (labels.size(0), num_classes)
+    """
+    labels_onehot = torch.zeros(labels.size(0), num_classes).to(device)
+    labels_onehot.scatter_(1, labels.view(-1, 1), 1)
+    return labels_onehot

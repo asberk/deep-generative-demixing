@@ -19,23 +19,19 @@ from ignite.metrics import Loss, MeanSquaredError
 # from ignite.handlers import ModelCheckpoint
 
 from viz import create_save_image_callback
-from util import Logger, create_yb_to_one_hot
+from util import Logger, create_yb_to_one_hot, to_onehot
 
 
 def get_default_autoencoder_loss(lamda=None):
     if lamda is None:
         lamda = 1.0
+    if not isinstance(lamda, torch.Tensor):
+        lamda = torch.tensor(lamda).float()
 
     def loss_fn(x_recon, x_true, mu, log_var):
-        try:
-            BCE = F.binary_cross_entropy(x_recon, x_true, reduction="sum")
-        except RuntimeError as rte:
-            import sys
-
-            print(rte.args[0])
-            print(sys.exc_info())
-            pdb.set_trace()
-        KLD = -0.5 * torch.sum(1 + log_var - mu.pow(2) - log_var.exp())
+        BCE = F.binary_cross_entropy(x_recon, x_true, reduction="sum")
+        KLD = mu.pow(2) + log_var.exp() - log_var - 1
+        KLD = KLD.mul_(0.5).sum()
         return BCE + lamda * KLD
 
     return loss_fn
@@ -56,33 +52,19 @@ def loss_eval_output_transform(output):
     return ret
 
 
-def create_log_handler(trainer):
-    logger = Logger()
-
-    def log_metrics(engine, phase):
-        print(
-            f"Epoch {trainer.state.epoch} {phase} loss: {engine.state.metrics['loss']}"
-        )
-        for metric_name, metric_value in engine.state.metrics.items():
-            logger(f"{phase}_{metric_name}", metric_value)
-
-    return log_metrics, logger
-
-
 def create_vae_train_step(
-    model, optimizer, criterion, device=None, non_blocking=False
+    network, optimizer, criterion, device, non_blocking=False
 ):
-    device = model.device
+
     if criterion is None:
         criterion = get_default_autoencoder_loss()
 
-    def train_step(engine, batch):
-        model.train()
+    def train_step(engine: Engine, batch):
+        network.train()
         optimizer.zero_grad()
         Xb, yb = _prepare_batch(batch, device=device, non_blocking=non_blocking)
-        Xb = Xb.to(device)
-        x_recon, mu, log_var = model(Xb)
-        loss = criterion(x_recon, Xb, mu, log_var)
+        Xr, mu, log_var = network(Xb)
+        loss = criterion(Xr, Xb, mu, log_var)
         loss.backward()
         optimizer.step()
         return loss.item()
@@ -90,14 +72,12 @@ def create_vae_train_step(
     return train_step
 
 
-def create_vae_eval_step(model, device=None, non_blocking=False):
-    device = model.device
-
+def create_vae_eval_step(network, device, non_blocking=False):
     def eval_step(engine, batch):
-        model.eval()
+        network.eval()
         Xb, yb = _prepare_batch(batch, device=device, non_blocking=non_blocking)
         with torch.no_grad():
-            Xr, mu, log_var = model(Xb)
+            Xr, mu, log_var = network(Xb)
         return Xr, Xb, yb, mu, log_var
 
     return eval_step
@@ -155,25 +135,19 @@ def create_vae_engines(
 
 
 def create_cvae_train_step(
-    model,
-    optimizer,
-    yb_to_one_hot,
-    criterion=None,
-    device=None,
-    non_blocking=False,
+    network, criterion, optimizer, device, non_blocking=False,
 ):
-    device = model.device
     if criterion is None:
         criterion = get_default_autoencoder_loss()
 
     def train_step(engine, batch):
-        model.train()
+        network.train()
         optimizer.zero_grad()
-        Xb, yb = _prepare_batch(batch, device=device, non_blocking=non_blocking)
-        Xb = Xb.to(device)
-        y_one_hot = yb_to_one_hot(yb).to(device)
-        x_recon, mu, log_var = model((Xb, y_one_hot))
-        loss = criterion(x_recon, Xb, mu, log_var)
+        input, target = _prepare_batch(
+            batch, device=device, non_blocking=non_blocking
+        )
+        output, mu, log_var = network(input, target)
+        loss = criterion(output, input, mu, log_var)
         loss.backward()
         optimizer.step()
         return loss.item()
@@ -181,74 +155,120 @@ def create_cvae_train_step(
     return train_step
 
 
-def create_cvae_eval_step(
-    model, yb_to_one_hot, device=None, non_blocking=False
-):
-    device = model.device
+def create_cvae_eval_step(network, device, non_blocking=False):
+    """
+    create_cvae_eval_step(network, device, non_blocking=False)
+
+    Creates an update function to be used by an ignite.engine.Engine evaluator.
+
+    Parameters
+    ----------
+    network: nn.Module
+        Conditional VAE
+    device: torch.device
+        Non-optional.
+    non_blocking: bool
+        Default: False
+
+    Returns
+    -------
+    eval_step : callable
+        Pass this to ignite.engine.Engine.
+    """
 
     def eval_step(engine, batch):
-        model.eval()
-        Xb, yb = _prepare_batch(batch, device=device, non_blocking=non_blocking)
+        """
+        eval_step(engine, batch)
+
+        Parameters
+        ----------
+        engine: ignite.engine.Engine
+            The evaluator engine.
+        batch: tuple
+            The batch to evaluated.
+        
+        Returns
+        -------
+        output : torch.Tensor
+            Shape (batch_size, num_channels, width, height)
+        input : torch.Tensor
+            Shape (batch_size, num_channels, width, height)
+        target : torch.Tensor
+            Shape (batch_size,)
+        mu : torch.Tensor
+            Shape (batch_size, latent_features)
+        log_var : torch.Tensor
+            Shape (batch_size, latent_features)
+        """
+        network.eval()
+        input, target = _prepare_batch(
+            batch, device=device, non_blocking=non_blocking
+        )
         with torch.no_grad():
-            y_one_hot = yb_to_one_hot(yb).to(device)
-            Xr, mu, log_var = model((Xb, y_one_hot))
-        return Xr, Xb, yb, mu, log_var
+            output, mu, log_var = network(input, target)
+        return output, input, target, mu, log_var
 
     return eval_step
 
 
-def create_cvae_engines(
-    model: nn.Module,
-    optimizer,
-    classes,
-    criterion=None,
-    metrics=None,
-    device=None,
-    non_blocking=False,
-    fig_dir=None,
-    unflatten=None,
-    batch_size=None,
+def _create_cvae_evaluator(
+    network, criterion, device, metrics=None, non_blocking=False
 ):
-
-    device = model.device
-    if criterion is None:
-        criterion = get_default_autoencoder_loss()
-
-    if batch_size is None:
-        print("Assuming batch_size = 128.")
-        batch_size = 128
-
-    yb_to_one_hot = create_yb_to_one_hot(batch_size, classes)
-
-    train_step = create_cvae_train_step(
-        model,
-        optimizer,
-        yb_to_one_hot,
-        criterion=criterion,
-        device=device,
-        non_blocking=non_blocking,
-    )
-    eval_step = create_cvae_eval_step(
-        model, yb_to_one_hot, device=device, non_blocking=non_blocking
-    )
+    from ignite.metrics import Loss
 
     if metrics is None:
         metrics = {}
+
+    def loss_output_transform(output):
+        return (*output[:2], {"mu": output[3], "log_var": output[4]})
+
     metrics.setdefault(
-        "loss", Loss(criterion, output_transform=loss_eval_output_transform),
+        "loss", Loss(criterion, output_transform=loss_output_transform)
     )
     metrics.setdefault(
         "mse", MeanSquaredError(output_transform=lambda x: x[:2])
     )
+
+    eval_step = create_cvae_eval_step(
+        network, device, non_blocking=non_blocking
+    )
+    evaluator = Engine(eval_step)
+
+    for metric_name, metric in metrics.items():
+        metric.attach(evaluator, metric_name)
+    return evaluator
+
+
+def create_cvae_engines(
+    network: nn.Module,
+    criterion,
+    optimizer,
+    dataloaders,
+    device,
+    metrics=None,
+    non_blocking=False,
+    fig_dir=None,
+    unflatten=None,
+):
+
+    if criterion is None:
+        criterion = get_default_autoencoder_loss()
+
+    train_step = create_cvae_train_step(
+        network, criterion, optimizer, device, non_blocking,
+    )
     trainer = Engine(train_step)
-    evaluator = create_autoencoder_evaluator(eval_step, metrics=metrics)
+    evaluator = _create_cvae_evaluator(
+        network, criterion, device, metrics, non_blocking
+    )
 
     save_image_callback = create_save_image_callback(
         fig_dir, unflatten=unflatten
     )
 
     def _epoch_getter():
-        return trainer.state.__dict__.get("epoch", None)
+        if hasattr(trainer, "state") and hasattr(trainer.state, "__dict__"):
+            return trainer.state.__dict__.get("epoch", None)
 
     evaluator.add_event_handler(
         Events.ITERATION_COMPLETED(once=1),
@@ -256,9 +276,25 @@ def create_cvae_engines(
         epoch=_epoch_getter,
     )
 
-    val_log_handler, val_logger = create_log_handler(trainer)
+    logger = Logger()
 
-    return trainer, evaluator, val_log_handler, val_logger
+    def write_log(engine, phase):
+        epoch = _epoch_getter()
+        loss_value = engine.state.metrics["loss"]
+        print(f"Epoch {epoch} {phase} loss {loss_value:.4f}")
+        logger(f"{phase}_epoch", epoch)
+        for metric_name, metric_value in engine.state.metrics.items():
+            logger(f"{phase}_{metric_name}", metric_value)
+
+    @trainer.on(Events.EPOCH_COMPLETED)
+    def run_evaluator(engine):
+        for phase, loader in dataloaders.items():
+            with evaluator.add_event_handler(
+                Events.EPOCH_COMPLETED, write_log, phase=phase
+            ):
+                evaluator.run(loader)
+
+    return trainer, evaluator, logger
 
 
 def create_default_engines_from_steps(
