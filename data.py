@@ -263,6 +263,35 @@ def basic_1_8_setup(ravel=True, batch_size=128):
     return dataloaders, img_shape, classes
 
 
+def single_digit_setup(digit_class=1, ravel=True, batch_size=128):
+    """
+    Datasets and dataloaders with 1 digit class only.
+
+    Returns
+    -------
+    datasets : dict
+        keys: ["train", "train_eval", "val", "test"]
+        proportions: [ 80% dev, 50% train, 20% dev, 100% holdout ]
+    dataloaders : dict
+        batch_size: {"train" : 16, "train_eval": 128, "val": 128, "test": 128}
+        shuffle: {"train" : True, "train_eval": False, "val": False, "test": False}
+    """
+    if ravel:
+        on_load_transform = transforms.Compose(
+            [transforms.ToTensor(), transforms.Lambda(lambda x: x.view(-1))]
+        )
+    else:
+        on_load_transform = transforms.ToTensor()
+    dset_dev, dset_ho = load_mnist_datasets(
+        transform=on_load_transform, classes=[digit_class]
+    )
+    datasets = get_partitioned_datasets(dset_dev, dset_ho)
+    dataloaders = get_dataloaders(datasets, batch_size=batch_size)
+    img_shape = datasets["train"][0][0].size()
+    classes = datasets["train"].targets.unique()
+    return dataloaders, img_shape, classes
+
+
 def basic_1_2_3_setup(ravel=True, batch_size=128):
     """
     basic_1_2_3_setup()

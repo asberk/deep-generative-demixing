@@ -1,0 +1,121 @@
+"""
+gd_numerics_two_network
+
+These are the numerics for the generative demixing conference paper.
+
+Author: Aaron Berk <aberk@math.ubc.ca>
+Copyright © 2020, Aaron Berk, all rights reserved.
+Created:  9 September 2020
+
+"""
+import numpy as np
+
+from basic_parser import parser
+from data import single_digit_setup
+from model import networks
+import train
+from train_vae import VAETrainer
+from util import get_tstamp
+
+
+tstamp = get_tstamp()
+
+
+def _key_helper(key):
+    return "_".join(key.split("_")[1:])
+
+
+def split_args(args):
+    network_kwargs = {
+        _key_helper(k): v
+        for k, v in args.__dict__.items()
+        if ("network_" in k) and (v is not None)
+    }
+    criterion_kwargs = {
+        _key_helper(k): v
+        for k, v in args.__dict__.items()
+        if ("criterion_" in k) and (v is not None)
+    }
+    optimizer_kwargs = {
+        _key_helper(k): v
+        for k, v in args.__dict__.items()
+        if ("optimizer_" in k) and (v is not None)
+    }
+    return network_kwargs, criterion_kwargs, optimizer_kwargs
+
+
+def setup_function(
+    digit_class,
+    max_epochs,
+    auto_lr,
+    network_name,
+    network_kwargs,
+    criterion_name,
+    criterion_kwargs,
+    optimizer_name,
+    optimizer_kwargs,
+):
+    dataloaders, img_shape, classes = single_digit_setup(
+        digit_class, ravel=True, batch_size=batch_size
+    )
+    in_features = np.prod(img_shape)
+    print(network_kwargs)
+    network = networks[network_name](in_features=in_features, **network_kwargs)
+    criterion = train.criteria[criterion_name](**criterion_kwargs)
+    optim_fn = train.optimizers[optimizer_name]
+    optimizer = optim_fn(network.parameters(), **optimizer_kwargs)
+    vae_trainer = VAETrainer(
+        dataloaders,
+        network,
+        criterion,
+        optimizer,
+        unflatten=(1, 28, 28),
+        auto_lr=auto_lr,
+        base_log_path=f"./log/{tstamp}",
+    )
+    return {
+        "trainer": vae_trainer,
+        "dataloaders": dataloaders,
+        "network": network,
+        "criterion": criterion,
+        "optimizer": optimizer,
+    }
+
+
+def train_networks(digit_classes, trainers, epochs):
+    for digit_class in digit_classes:
+        trainers[digit_class].train(epochs)
+
+
+if __name__ == "__main__":
+    args = parser.parse_args()
+
+    batch_size = {
+        "train": args.train_batch_size,
+        "val": args.val_batch_size,
+        "test": args.val_batch_size,
+    }
+
+    print(args.__dict__)
+    network_kwargs, criterion_kwargs, optimizer_kwargs = split_args(args)
+    objects = {}
+    digit_classes = [args.digit1, args.digit2]
+    for digit_class in digit_classes:
+        objects[digit_class] = setup_function(
+            digit_class,
+            args.epochs,
+            args.auto_lr,
+            args.network,
+            network_kwargs,
+            args.criterion,
+            criterion_kwargs,
+            args.optimizer,
+            optimizer_kwargs,
+        )
+
+    if args.train:
+        trainers = {dc: objects[dc]["trainer"] for dc in digit_classes}
+        train_networks(digit_classes, trainers, args.epochs)
+
+
+# # numerics_generative_demixing.py ends here

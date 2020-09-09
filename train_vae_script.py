@@ -1,5 +1,5 @@
 """
-deep-generative-demixing
+train_vae_script.py
 
 Uses one or two deep generative models as prior(s) for a demixing problem.
 
@@ -76,6 +76,8 @@ if __name__ == "__main__":
         os.makedirs(chkpt_path)
 
     if optim_fn_kwargs.get("lr", None) is None:
+        __import__("pdb").set_trace()
+
         lr_star = find_lr(train_loader, plot_fpath=find_lr_fpath)
         print("lr_star", lr_star)
         args.optim_fn_kwargs["lr"] = lr_star
@@ -84,23 +86,18 @@ if __name__ == "__main__":
 
     optimizer = optim_fn(model.parameters(), **optim_fn_kwargs)
 
-    (
-        trainer,
-        evaluator,
-        val_log_handler,
-        val_logger,
-    ) = train.create_vae_engines(
-        model, optimizer, fig_dir=eval_img_path, unflatten=(1, 28, 28)
+    (trainer, evaluator, logger,) = train.create_vae_engines(
+        model,
+        optimizer,
+        val_loaders,
+        fig_dir=eval_img_path,
+        unflatten=(1, 28, 28),
     )
-    trainer = train.add_evaluation(
-        trainer, evaluator, val_log_handler, val_loaders
-    )
-
     trainer.run(train_loader, max_epochs=args.max_epochs)
 
     if args.data_kwargs.get("batch_size", None) is None:
         args.data_kwargs["batch_size"] = dataloaders["train"].batch_size
-    val_logger.save(os.path.join(log_path, "val_log.csv"))
+    logger.save(os.path.join(log_path, "val_log.csv"))
     save_args(args, os.path.join(log_path, "args.csv"))
 
     save_model(
@@ -108,7 +105,7 @@ if __name__ == "__main__":
         model._get_name(),
         epoch=args.max_epochs,
         score_name="val_loss",
-        score_value=val_logger.log["val_loss"][-1],
+        score_value=logger.log["val_loss"][-1],
         tstamp=tstamp,
         save_dir=chkpt_path,
     )

@@ -23,7 +23,7 @@ class SimpleVAE(nn.Module):
     ):
         """
         VariationalAutoEncoder(in_features, hidden_features)
-        
+
         Parameters
         ----------
         in_features : int
@@ -105,7 +105,7 @@ class SimpleConditionalVAE(nn.Module):
             dropout_probability=0.4,
             device=None,
         )
-        
+
         Parameters
         ----------
         in_features : int
@@ -277,6 +277,80 @@ class FullyConnectedVAE(nn.Module):
         z = self.reparametrize(mu, log_var)
         out = self.decode(z)
         return out, mu, log_var
+
+
+class CNN_VAE(nn.Module):
+    def __init__(self, in_channels, latent_features, device):
+        """
+        CNN variant of a variational autoencoder.
+
+        encode
+        ---------------------------
+        torch.Size([1,   1, 28, 28]) ⤸
+        torch.Size([1,  16, 13, 13]) ⤸
+        torch.Size([1,  32,  5,  5]) ⤸
+        torch.Size([1, 128,  1,  1]) ⤸
+        torch.Size([1, 128,  1,  1]) ⤸
+        (
+            torch.Size([1, latent_features]),
+            torch.Size([1, latent_features])
+        )
+
+        decode
+        ------------------------------
+        torch.Size([1, latent_features])     ⤸
+        torch.Size([1, 32,  2,  2])          ⤸
+        torch.Size([1, 32,  8,  8])          ⤸
+        torch.Size([1, 32, 14, 14])          ⤸
+        torch.Size([1, 16, 20, 20])          ⤸
+        torch.Size([1, 16, 26, 26])          ⤸
+        torch.Size([1, in_channels, 28, 28])
+        """
+        super().__init__()
+        self._device = device
+        self.conv1 = nn.Conv2d(in_channels, 16, (3, 3))
+        self.conv2 = nn.Conv2d(16, 32, (3, 3))
+        self.conv3 = nn.Conv2d(32, 2 * latent_features, (3, 3))
+        self.lin1 = nn.Linear(2 * latent_features, latent_features)
+        self.lin2 = nn.Linear(2 * latent_features, latent_features)
+
+        self.lin3 = nn.Linear(latent_features, 32 * 2 * 2)
+        self.convt1 = nn.ConvTranspose2d(32, 32, (4, 4), dilation=2, stride=1)
+        self.convt2 = nn.ConvTranspose2d(32, 32, (4, 4), dilation=2, stride=1)
+        self.convt3 = nn.ConvTranspose2d(32, 16, (4, 4), dilation=2, stride=1)
+        self.convt4 = nn.ConvTranspose2d(16, 16, (4, 4), dilation=2, stride=1)
+        self.convt5 = nn.ConvTranspose2d(
+            16, in_channels, (3, 3), dilation=1, stride=1
+        )
+
+    def encode(self, input):
+        X = torch.max_pool2d(torch.relu(self.conv1(input)), (2, 2))
+        X = torch.max_pool2d(torch.relu(self.conv2(X)), (2, 2))
+        X = torch.max_pool2d(torch.relu(self.conv3(X)), (2, 2))
+        X = nn.functional.adaptive_avg_pool2d(X, (1, 1))
+        X = X.view(X.size(0), -1)
+        mu = self.lin1(X)
+        log_var = self.lin2(X)
+        return mu, log_var
+
+    def reparametrize(self, mu, log_var):
+        eps = torch.randn_like(mu).to(self._device)
+        return mu + eps * log_var.mul_(0.5).exp_()
+
+    def decode(self, z):
+        X = self.lin3(z).view(-1, 32, 2, 2)
+        X = torch.relu(self.convt1(X))
+        X = torch.relu(self.convt2(X))
+        X = torch.relu(self.convt3(X))
+        X = torch.relu(self.convt4(X))
+        X = torch.sigmoid(self.convt5(X))
+        return X
+
+    def forward(self, input):
+        mu, log_var = self.encode(input)
+        z = self.reparametrize(mu, log_var)
+        output = self.decode(z)
+        return output, mu, log_var
 
 
 class CCVAE(nn.Module):

@@ -86,6 +86,7 @@ def create_vae_eval_step(network, device, non_blocking=False):
 def create_vae_engines(
     model,
     optimizer,
+    val_loaders,
     criterion=None,
     metrics=None,
     device=None,
@@ -121,7 +122,8 @@ def create_vae_engines(
     )
 
     def _epoch_getter():
-        return trainer.state.__dict__.get("epoch", None)
+        if hasattr(trainer, "state") and hasattr(trainer.state, "__dict__"):
+            return trainer.state.__dict__.get("epoch", None)
 
     evaluator.add_event_handler(
         Events.ITERATION_COMPLETED(once=1),
@@ -129,9 +131,25 @@ def create_vae_engines(
         epoch=_epoch_getter,
     )
 
-    val_log_handler, val_logger = create_log_handler(trainer)
+    logger = Logger()
 
-    return trainer, evaluator, val_log_handler, val_logger
+    def write_log(engine, phase):
+        epoch = _epoch_getter()
+        loss_value = engine.state.metrics["loss"]
+        print(f"Epoch {epoch} {phase} loss {loss_value:.4f}")
+        logger(f"{phase}_epoch", epoch)
+        for metric_name, metric_value in engine.state.metrics.items():
+            logger(f"{phase}_{metric_name}", metric_value)
+
+    @trainer.on(Events.EPOCH_COMPLETED)
+    def run_evaluator(engine):
+        for phase, loader in val_loaders.items():
+            with evaluator.add_event_handler(
+                Events.EPOCH_COMPLETED, write_log, phase=phase
+            ):
+                evaluator.run(loader)
+
+    return trainer, evaluator, logger
 
 
 def create_cvae_train_step(
