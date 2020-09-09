@@ -34,19 +34,22 @@ parser.add_argument(
     "--network",
     type=str,
     default="SimpleVAE",
-    help="network type. Options include SimpleVAE, FullyConnectedVAE, SimpleConditionalVAE",
+    help="network type. Options include SimpleVAE, FullyConnectedVAE, SimpleConditionalVAE", "CNN_VAE",
 )
 parser.add_argument(
-    "--network-hidden-features", type=int, default=256, help="default=256",
+    "--network-hidden-features", type=int, default=None, help="",
 )
 parser.add_argument(
-    "--network-latent-features", type=int, default=16, help="default=16",
+    "--network-latent-features", type=int, default=None, help="",
+)
+parser.add_argument(
+    "--network-device", type=str, default=None, help="",
 )
 parser.add_argument(
     "--network-dropout-probability",
     type=float,
-    default=0.5,
-    help="default=0.5",
+    default=None,
+    help="",
 )
 parser.add_argument(
     "--criterion", type=str, default="default", help="default='default'",

@@ -424,6 +424,7 @@ networks = {
     "SimpleConditionalVAE": SimpleConditionalVAE,
     "FullyConnectedVAE": FullyConnectedVAE,
     "CCVAE": CCVAE,
+    "CNN_VAE": CNN_VAE,
 }
 
 # # model.py ends here
