@@ -8,6 +8,7 @@ Copyright © 2020, Aaron Berk, all rights reserved.
 Created:  9 September 2020
 
 """
+import inspect
 import numpy as np
 
 from basic_parser import parser
@@ -58,9 +59,27 @@ def setup_function(
     dataloaders, img_shape, classes = single_digit_setup(
         digit_class, ravel=True, batch_size=batch_size
     )
-    in_features = np.prod(img_shape)
+    Network = networks[network_name]
+    network_arg_names = [
+        x for x in inspect.getfullargspec(Network).args if x != "self"
+    ]
+    if ("in_channels" in network_arg_names) and (len(img_shape) >= 3):
+        in_channels = img_shape[-3]
+        network_kwargs["in_channels"] = in_channels
+    elif "in_features" in network_arg_names:
+        in_features = np.prod(img_shape)
+        network_kwargs["in_features"] = in_features
+
+    for key in network_kwargs.keys():
+        if key not in network_arg_names:
+            emsg = (
+                f"Unexpected argument for Network {network_name}. "
+                f"Valid args are:\n  {network_arg_names}"
+            )
+            raise ValueError(emsg)
+
     print(network_kwargs)
-    network = networks[network_name](in_features=in_features, **network_kwargs)
+    network = Network(**network_kwargs)
     criterion = train.criteria[criterion_name](**criterion_kwargs)
     optim_fn = train.optimizers[optimizer_name]
     optimizer = optim_fn(network.parameters(), **optimizer_kwargs)
