@@ -29,7 +29,7 @@ else
     echo "  gd_numerics_two_network.py"
     echo "($DATE)"
     echo ""
-    python3 gd_numerics_two_network.py --network=CNN_VAE --latent_features=128 --device=cpu
+    python3 gd_numerics_two_network.py --network=CNN_VAE --network-latent-features=128 --network-device=cpu
 fi
 
 echo "Complete."
