@@ -94,7 +94,12 @@ def create_vae_engines(
     unflatten=None,
 ):
 
-    device = model.device
+    try:
+        device = model.device
+    except:
+        device = model._device
+    finally:
+        device = "cuda" if torch.cuda.is_available() else "cpu"
     if criterion is None:
         criterion = get_default_autoencoder_loss()
 
