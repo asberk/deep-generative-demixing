@@ -1,7 +1,51 @@
 import torch
 from torch import nn, optim
-from util import Logger
+from util import get_device, Logger
 
+
+def BinaryMixer:
+    def __init__(self, A=None, clamp=False, device=None):
+        """Mixes two signals x, y using the input matrix A:
+            b = x + A.y
+
+        Parameters
+        ----------
+        A: matrix
+            must have number of rows equal to prod(x.shape) and number of columns equal to prod(y.shape)
+        clamp: bool
+            Whether to clamp output to unit interval. default: False
+        device: torch.device or str
+            cpu or cuda
+
+        """
+        device = get_device(device)
+
+        if A is None:
+            # no mixing
+            self.A = None
+        elif not isinstance(A, torch.Tensor):
+            A = torch.as_tensor(A).to(device)
+            self.A = A
+
+        self.clamp = clamp
+        self.device = device
+
+    def __call__(self, x, y):
+        x_shape = x.shape
+        y_shape = y.shape
+
+        if self.A is None:
+            assert (x_shape == y_shape), f"Expected x.shape == y.shape but found {x.shape} != {y.shape}"
+            b = (x + y).to(self.device)
+        else:
+            x = x.to(self.device)
+            y = y.to(self.device)
+
+            b = x + torch.matmul(self.A, y.view(-1, 1)).view(*x_shape)
+
+        if self.clamp:
+            b.clamp_(0., 1.)
+        return b
 
 def demixing_problem(
     model: nn.Module,
@@ -10,24 +54,20 @@ def demixing_problem(
     Q=None,
     num_iter=1000,
     clamp=True,
+    device=None,
 ):
+    device = get_device(device)
 
-    x0_shape = x0.shape
-    x1_shape = x1.shape
-    assert (
-        x0_shape == x1_shape
-    ), f"Expected x0.shape == x1.shape but found {x0.shape} != {x1.shape}"
-    if (Q is not None) and isinstance(Q, torch.Tensor):
-        mixture = x0 + torch.matmul(Q, x1.view(-1, 1)).view(*x1_shape)
-    else:
-        mixture = x0 + x1
+    mixer = BinaryMixer(A=Q, clamp=clamp, device=device)
+    mixture = mixer(x0, x1)
 
-    if clamp:
-        mixture.clamp_(0.0, 1.0)
+    model = model.eval().to(device)
 
-    model.eval()
+    try:
+        mixture_params = model.encode(mixture.view(1, -1))
+    except:
+        mixture_params = model.encode(mixture.unsqueeze_(0))
 
-    mixture_params = model.encode(mixture.view(1, -1))
     mixture_encoding = model.reparametrize(*mixture_params)
 
     # Set requires_grad = False for all model parameters.

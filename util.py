@@ -7,6 +7,17 @@ import torch
 from torch import nn
 
 
+def get_device(device=None):
+    if device is None:
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+    if isinstance(device, str):
+        device = torch.device(device)
+    assert isinstance(
+        device, torch.device
+    ), f"Expected str or torch.device for device."
+    return device
+
+
 class Logger:
     def __init__(self):
         self.log = defaultdict(list)
