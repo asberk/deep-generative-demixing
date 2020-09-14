@@ -159,10 +159,26 @@ def _main(args):
 
 
 def debug_run():
-    args = parser.parse_args()
-    args.network = "CNN_VAE"
-    args.network_latent_features = 128
-    args.network_device = "cuda"
+    from argparse import Namespace
+
+    args = Namespace(
+        digit1=1,
+        digit2=8,
+        train_batch_size=32,
+        val_batch_size=128,
+        network="CNN_VAE",
+        network_latent_features=128,
+        network_device="cuda",
+        criterion="default",
+        criterion_lamda=1.0,
+        optimizer="SGD",
+        optimizer_lr=1e-5,
+        optimizer_momentum=0.9,
+        optimizer_weight_decay=1e-3,
+        epochs=200,
+        auto_lr=True,
+        train=True,
+    )
 
     _main(args)
 
