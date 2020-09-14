@@ -11,25 +11,8 @@ Commentary:
     You want to train this on Google Colab or something of that ilk.
 """
 import os
-import sys
-from collections import defaultdict
 from argparse import Namespace
-
-import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
-
 import torch
-from torch import nn, optim
-from torch.utils.data import DataLoader, Dataset, TensorDataset
-from torchvision.datasets import FashionMNIST
-from torchvision import transforms
-from torchvision.utils import save_image
-
-import skorch
-from skorch.helper import predefined_split
-
-from torchsummary import summary
 
 from data import load_data_fns
 from model import networks
