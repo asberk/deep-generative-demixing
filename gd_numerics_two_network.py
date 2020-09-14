@@ -10,6 +10,7 @@ Created:  9 September 2020
 """
 import inspect
 import numpy as np
+import torch
 
 from basic_parser import parser
 from data import single_digit_setup
@@ -48,6 +49,7 @@ def split_args(args):
 def setup_function(
     digit_class,
     max_epochs,
+    batch_size,
     auto_lr,
     network_name,
     network_kwargs,
@@ -115,12 +117,23 @@ def train_networks(digit_classes, trainers, epochs):
         trainers[digit_class].train(epochs)
 
 
+def _device_type(args):
+    if torch.cuda.is_available():
+        args.__dict__.setdefault("network_device", "cuda")
+    else:
+        args.__dict__.setdefault("network_device", "cpu")
+    return args.network_device
+
+
 def _main(args):
     batch_size = {
         "train": args.train_batch_size,
         "val": args.val_batch_size,
         "test": args.val_batch_size,
     }
+
+    device_type = _device_type(args)
+    # device = torch.device(device_type)
 
     print(args.__dict__)
     network_kwargs, criterion_kwargs, optimizer_kwargs = split_args(args)
@@ -130,6 +143,7 @@ def _main(args):
         objects[digit_class] = setup_function(
             digit_class,
             args.epochs,
+            batch_size,
             args.auto_lr,
             args.network,
             network_kwargs,
@@ -146,9 +160,9 @@ def _main(args):
 
 def debug_run():
     args = parser.parse_args()
-    args.__dict__["network"] = "CNN_VAE"
-    args.__dict__["network_latent_features"] = 128
-    args.__dict__["network_device"] = "cuda"
+    args.network = "CNN_VAE"
+    args.network_latent_features = 128
+    args.network_device = "cuda"
 
     _main(args)
 

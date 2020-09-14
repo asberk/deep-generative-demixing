@@ -307,7 +307,8 @@ class CNN_VAE(nn.Module):
         torch.Size([1, in_channels, 28, 28])
         """
         super().__init__()
-        self._device = device
+
+        self._device = device if torch.cuda.is_available() else "cpu"
         self.conv1 = nn.Conv2d(in_channels, 16, (3, 3))
         self.conv2 = nn.Conv2d(16, 32, (3, 3))
         self.conv3 = nn.Conv2d(32, 2 * latent_features, (3, 3))
