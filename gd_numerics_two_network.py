@@ -112,9 +112,19 @@ def setup_function(
     }
 
 
-def train_networks(digit_classes, trainers, epochs):
-    for digit_class in digit_classes:
-        trainers[digit_class].train(epochs)
+def train_networks(trainers, epochs):
+    """trains the VAETrainer objects in the dict `trainers` for `epochs` epochs.
+
+    Parameters
+    ----------
+    trainers: dict of VAETrainer
+        having keys equal to digit_classes
+    epochs: int
+        number of epochs for which to train each model.
+
+    """
+    for digit_class, trainer in trainers.items():
+        trainer.train(epochs)
 
 
 def _device_type(args):
@@ -155,7 +165,7 @@ def main(args):
 
     if args.train:
         trainers = {dc: objects[dc]["trainer"] for dc in digit_classes}
-        train_networks(digit_classes, trainers, args.epochs)
+        train_networks(trainers, args.epochs)
 
 
 def run(**kwargs):
@@ -188,6 +198,6 @@ def run(**kwargs):
 
 if __name__ == "__main__":
     args = parser.parse_args()
-    main()
+    main(args)
 
 # # numerics_generative_demixing.py ends here
