@@ -125,7 +125,7 @@ def _device_type(args):
     return args.network_device
 
 
-def _main(args):
+def main(args):
     batch_size = {
         "train": args.train_batch_size,
         "val": args.val_batch_size,
@@ -158,7 +158,7 @@ def _main(args):
         train_networks(digit_classes, trainers, args.epochs)
 
 
-def debug_run():
+def run(**kwargs):
     from argparse import Namespace
 
     args = Namespace(
@@ -180,15 +180,14 @@ def debug_run():
         train=True,
     )
 
-    _main(args)
+    for key, value in kwargs.items():
+        args.__dict__[key] = value
 
-
-def main():
-    args = parser.parse_args()
-    _main(args)
+    main(args)
 
 
 if __name__ == "__main__":
+    args = parser.parse_args()
     main()
 
 # # numerics_generative_demixing.py ends here
