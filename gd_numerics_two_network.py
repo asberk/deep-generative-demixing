@@ -89,6 +89,8 @@ def setup_function(
             )
             raise ValueError(emsg)
 
+    criterion_kwargs.setdefault(network_kwargs.get("device", "cpu"))
+
     print(network_kwargs)
     network = Network(**network_kwargs)
     criterion = train.criteria[criterion_name](**criterion_kwargs)

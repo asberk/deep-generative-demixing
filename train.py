@@ -21,11 +21,18 @@ from viz import create_save_image_callback
 from util import Logger, create_yb_to_one_hot, to_onehot
 
 
-def get_default_autoencoder_loss(lamda=None):
+def get_default_autoencoder_loss(lamda=None, device=None):
+    if device is None:
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+    if not isinstance(device, torch.device):
+        assert isinstance(
+            device, str
+        ), f"Expected str or torch.device for device"
+        device = torch.device(device)
     if lamda is None:
         lamda = 1.0
     if not isinstance(lamda, torch.Tensor):
-        lamda = torch.tensor(lamda).float()
+        lamda = torch.tensor(lamda).float().to(device)
 
     def loss_fn(x_recon, x_true, mu, log_var):
         BCE = F.binary_cross_entropy(x_recon, x_true, reduction="sum")
