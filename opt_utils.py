@@ -35,7 +35,7 @@ def create_lr_finder_engine(
         Xb, yb = _prepare_batch(batch, device=device, non_blocking=non_blocking)
         # Xb = Xb.to(device)
         x_recon, mu, log_var = network(Xb)
-        print(x_recon.device, mu.device, log_var.device)
+        # print(x_recon.device, mu.device, log_var.device)
         loss = criterion(x_recon, Xb, mu, log_var)
         loss.backward()
         optimizer.step()
