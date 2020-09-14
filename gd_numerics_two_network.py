@@ -115,9 +115,7 @@ def train_networks(digit_classes, trainers, epochs):
         trainers[digit_class].train(epochs)
 
 
-if __name__ == "__main__":
-    args = parser.parse_args()
-
+def _main(args):
     batch_size = {
         "train": args.train_batch_size,
         "val": args.val_batch_size,
@@ -145,5 +143,22 @@ if __name__ == "__main__":
         trainers = {dc: objects[dc]["trainer"] for dc in digit_classes}
         train_networks(digit_classes, trainers, args.epochs)
 
+
+def debug_run():
+    args = parser.parse_args()
+    args.__dict__["network"] = "CNN_VAE"
+    args.__dict__["network_latent_features"] = 128
+    args.__dict__["network_device"] = "cuda"
+
+    _main(args)
+
+
+def main():
+    args = parser.parse_args()
+    _main(args)
+
+
+if __name__ == "__main__":
+    main()
 
 # # numerics_generative_demixing.py ends here
