@@ -2,7 +2,7 @@
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=64000M
-#SBATCH --time=0:05:00
+#SBATCH --time=1:30:00
 #SBATCH --account=def-yaniv
 #SBATCH --mail-user=aberk@math.ubc.ca
 #SBATCH --mail-type=ALL
