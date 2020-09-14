@@ -1,7 +1,7 @@
 """
 train_vae
 
-Trains a VAE on a digit.
+Class for training a VAE on a digit.
 
 Author: Aaron Berk <aberk@math.ubc.ca>
 Copyright © 2020, Aaron Berk, all rights reserved.

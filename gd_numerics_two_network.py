@@ -89,7 +89,7 @@ def setup_function(
             )
             raise ValueError(emsg)
 
-    criterion_kwargs.setdefault(network_kwargs.get("device", "cpu"))
+    criterion_kwargs.setdefault("device", network_kwargs.get("device", "cpu"))
 
     print(network_kwargs)
     network = Network(**network_kwargs)
