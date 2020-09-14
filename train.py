@@ -58,6 +58,8 @@ def create_vae_train_step(
     if criterion is None:
         criterion = get_default_autoencoder_loss()
 
+    network = network.to(device)
+
     def train_step(engine: Engine, batch):
         network.train()
         optimizer.zero_grad()
