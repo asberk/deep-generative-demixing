@@ -76,7 +76,6 @@ if __name__ == "__main__":
         os.makedirs(chkpt_path)
 
     if optim_fn_kwargs.get("lr", None) is None:
-        __import__("pdb").set_trace()
 
         lr_star = find_lr(train_loader, plot_fpath=find_lr_fpath)
         print("lr_star", lr_star)

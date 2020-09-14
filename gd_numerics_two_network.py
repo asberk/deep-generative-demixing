@@ -56,14 +56,23 @@ def setup_function(
     optimizer_name,
     optimizer_kwargs,
 ):
-    dataloaders, img_shape, classes = single_digit_setup(
-        digit_class, ravel=True, batch_size=batch_size
-    )
+
     Network = networks[network_name]
-    network_arg_names = [
-        x for x in inspect.getfullargspec(Network).args if x != "self"
-    ]
-    if ("in_channels" in network_arg_names) and (len(img_shape) >= 3):
+    network_arg_names = inspect.getfullargspec(Network).args
+    network_arg_names = [x for x in network_arg_names if x != "self"]
+
+    if "in_channels" in network_arg_names:
+        ravel = False
+    else:
+        ravel = True
+
+    dataloaders, img_shape, classes = single_digit_setup(
+        digit_class, ravel=ravel, batch_size=batch_size
+    )
+
+    if "in_channels" in network_arg_names:
+        emsg = f"Expected images, not vectors; got img_shape = {img_shape}"
+        assert len(img_shape) >= 3, emsg
         in_channels = img_shape[-3]
         network_kwargs["in_channels"] = in_channels
     elif "in_features" in network_arg_names:
