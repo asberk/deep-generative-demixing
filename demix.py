@@ -3,7 +3,7 @@ from torch import nn, optim
 from util import get_device, Logger
 
 
-def BinaryMixer:
+class BinaryMixer:
     def __init__(self, A=None, clamp=False, device=None):
         """Mixes two signals x, y using the input matrix A:
             b = x + A.y
@@ -11,31 +11,26 @@ def BinaryMixer:
         Parameters
         ----------
         A: matrix
-            must have number of rows equal to prod(x.shape) and number of columns equal to prod(y.shape)
+            must have number of rows equal to prod(x.shape) and number of
+            columns equal to prod(y.shape)
         clamp: bool
             Whether to clamp output to unit interval. default: False
         device: torch.device or str
             cpu or cuda
 
         """
-        device = get_device(device)
-
-        if A is None:
-            # no mixing
-            self.A = None
-        elif not isinstance(A, torch.Tensor):
-            A = torch.as_tensor(A).to(device)
-            self.A = A
-
+        self.device = get_device(device)
+        self._set_matrix(A)
         self.clamp = clamp
-        self.device = device
 
     def __call__(self, x, y):
         x_shape = x.shape
         y_shape = y.shape
 
         if self.A is None:
-            assert (x_shape == y_shape), f"Expected x.shape == y.shape but found {x.shape} != {y.shape}"
+            assert (
+                x_shape == y_shape
+            ), f"Expected x.shape == y.shape but found {x.shape} != {y.shape}"
             b = (x + y).to(self.device)
         else:
             x = x.to(self.device)
@@ -44,8 +39,84 @@ def BinaryMixer:
             b = x + torch.matmul(self.A, y.view(-1, 1)).view(*x_shape)
 
         if self.clamp:
-            b.clamp_(0., 1.)
+            b.clamp_(0.0, 1.0)
         return b
+
+    def _set_matrix(self, A):
+        if A is None:
+            # no mixing
+            self.A = None
+        elif not isinstance(A, torch.Tensor):
+            A = torch.as_tensor(A).to(self.device)
+            self.A = A
+
+
+class NaryMixer:
+    def __init__(self, mixing_matrices=None, clamp=False, device=None):
+        self.device = get_device(device)
+        self._set_matrices(mixing_matrices)
+        self.clamp = clamp
+
+    def __call__(self, *args, **kwargs):
+        if (len(args) > 0) and (len(kwargs) > 0):
+            emsg = "must all be either args or kwargs, not a mix"
+            raise ValueError(emsg)
+
+        if len(args) > 0:
+            kwargs = {i: arg.to(self.device) for i, arg in enumerate(args)}
+
+        signal_keys = set(kwargs.keys())
+        matrix_keys = set(self.A.keys())
+        mult_keys = signal_keys.intersection(matrix_keys)
+        other_keys = signal_keys.difference(mult_keys)
+
+        if len(other_keys) > 0:
+            other_mixed = torch.stack(
+                tuple(kwargs[key] for key in other_keys), dim=0
+            ).sum(dim=0)
+            output_shape = other_mixed.shape
+        else:
+            output_shape = (1, -1)
+
+        mult = {
+            key: torch.matmul(self.A[key], kwargs[key].view(-1, 1)).view(
+                *output_shape
+            )
+            for key in mult_keys
+        }
+        mult_mixed = torch.stack(
+            tuple(img for img in mult.values()), dim=0
+        ).sum(dim=0)
+
+        if len(other_keys) > 0:
+            mult_mixed = other_mixed + mult_mixed
+        if self.clamp:
+            mult_mixed.clamp_(0.0, 1.0)
+        return mult_mixed
+
+    def _set_matrix(self, key, matrix):
+        if (not hasattr(self, key)) or (getattr(self, key) is None):
+            self.A = {key: None}
+
+        if matrix is None:
+            return
+        elif not isinstance(matrix, torch.Tensor):
+            matrix = torch.as_tensor(matrix).to(self.device)
+            self.A[key] = matrix
+
+    def _set_matrices(self, mixing_matrices):
+        if isinstance(mixing_matrices, dict):
+            for key, matrix in mixing_matrices.items():
+                self._set_matrix(key, matrix)
+        elif isinstance(mixing_matrices, (tuple, list)):
+            for i, matrix in enumerate(mixing_matrices):
+                self._set_matrix(i, matrix)
+        else:
+            raise TypeError(
+                "container of mixing_matrices not recognized; "
+                "should be one of dict, tuple list. "
+            )
+
 
 def demixing_problem(
     model: nn.Module,
