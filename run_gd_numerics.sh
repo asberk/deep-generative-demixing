@@ -6,7 +6,7 @@
 #SBATCH --account=def-yaniv
 #SBATCH --mail-user=aberk@math.ubc.ca
 #SBATCH --mail-type=ALL
-#SBATCH --output=%u_%j_bootstrap_resnet_odir_normal.out
+#SBATCH --output=%u_%j_gd_cnn_vae.out
 export OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK
 
 echo ""

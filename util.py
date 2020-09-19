@@ -309,3 +309,13 @@ def to_onehot(labels, num_classes, device):
     labels_onehot = torch.zeros(labels.size(0), num_classes).to(device)
     labels_onehot.scatter_(1, labels.view(-1, 1), 1)
     return labels_onehot
+
+
+def get_hms(duration, str_formatted=True):
+    minutes, seconds = divmod(duration, 60)
+    hours, minutes = divmod(minutes, 60)
+    if callable(str_formatted):
+        return str_formatted(hours, minutes, seconds)
+    elif str_formatted:
+        return f"{int(hours):02d}:{int(minutes):02d}:{seconds:.2f}"
+    return hours, minutes, seconds

@@ -11,6 +11,8 @@ Created:  9 September 2020
 import os
 import inspect
 from argparse import Namespace
+from time import time
+
 import numpy as np
 import torch
 
@@ -19,7 +21,7 @@ from data import single_digit_setup
 from model import networks
 import train
 from train_vae import VAETrainer
-from util import get_tstamp, save_args
+from util import get_tstamp, save_args, get_hms
 
 
 tstamp = get_tstamp()
@@ -146,8 +148,14 @@ def train_networks(trainers, epochs):
         number of epochs for which to train each model.
 
     """
+    t00 = time()
     for digit_class, trainer in trainers.items():
+        t0 = time()
         trainer.train(epochs)
+        t1 = time()
+        duration = get_hms(t1 - t0)
+        print("train_duration:", duration)
+    print("total_train_duration:", get_hms(t1 - t00))
 
 
 def _device_type(args):
@@ -172,7 +180,9 @@ def main(args):
     network_kwargs, criterion_kwargs, optimizer_kwargs = split_args(args)
     objects = {}
     digit_classes = [args.digit1, args.digit2]
+    t00 = time()
     for digit_class in digit_classes:
+        t0 = time()
         objects[digit_class] = setup_function(
             digit_class,
             args.epochs,
@@ -185,6 +195,10 @@ def main(args):
             args.optimizer,
             optimizer_kwargs,
         )
+        t1 = time()
+        duration = get_hms(t1 - t0)
+        print("Set-up duration:", duration)
+    print("Total set-up duration:", get_hms(t1 - t00))
 
     if args.train:
         trainers = {dc: objects[dc]["trainer"] for dc in digit_classes}
@@ -221,6 +235,10 @@ def run(**kwargs):
 
 if __name__ == "__main__":
     args = parser.parse_args()
+
+    t0 = time()
     main(args)
+    t1 = time()
+    print("Total duration:", get_hms(t1 - t0))
 
 # # numerics_generative_demixing.py ends here
