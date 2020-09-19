@@ -121,6 +121,35 @@ def save_model(
     return
 
 
+def load_val_log(model_directory, fpattern=None):
+    if fpattern is None:
+        fpattern = "val_log.csv"
+    return pd.read_csv(os.path.join(model_directory, fpattern), index_col=0)
+
+
+def search_for_tstamp_directory(tstamp, directory=None, recursive=True):
+    """Searches for a directory named `tstamp`, recursively, starting in directory
+    `directory`.
+
+    Parameters
+    ----------
+    tstamp: str
+        tstamp returned by get_tstamp (e.g., "20200914-105758-237836")
+    directory: str
+        starting directory (default: './log/')
+    recursive: bool
+        Default: True (recommended)
+    """
+    if directory is None:
+        directory = "./log/"
+    for dirpath, dirnames, filenames in os.walk(directory):
+        if tstamp in dirnames:
+            return os.path.join(dirpath, tstamp)
+        if not recursive:
+            break
+    print(f"Directory {tstamp} not found.")
+
+
 def search_for_models(
     fpattern=None, directory=None, extension=".pth", recursive=True
 ):

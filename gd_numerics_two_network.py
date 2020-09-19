@@ -8,7 +8,9 @@ Copyright © 2020, Aaron Berk, all rights reserved.
 Created:  9 September 2020
 
 """
+import os
 import inspect
+from argparse import Namespace
 import numpy as np
 import torch
 
@@ -17,7 +19,7 @@ from data import single_digit_setup
 from model import networks
 import train
 from train_vae import VAETrainer
-from util import get_tstamp
+from util import get_tstamp, save_args
 
 
 tstamp = get_tstamp()
@@ -105,6 +107,25 @@ def setup_function(
         auto_lr=auto_lr,
         base_log_path=f"./log/{tstamp}",
     )
+
+    args = Namespace(
+        data="single_digit_setup",
+        data_kwargs={
+            "digit_class": digit_class,
+            "ravel": ravel,
+            "batch_size": batch_size,
+        },
+        max_epochs=max_epochs,
+        network=network_name,
+        network_kwargs=network_kwargs,
+        criterion=criterion_name,
+        criterion_kwargs=criterion_kwargs,
+        optim_fn=optimizer_name,
+        optim_fn_kwargs=optimizer_kwargs,
+    )
+
+    save_args(args, os.path.join(vae_trainer.paths["log"], "args.csv"))
+
     return {
         "trainer": vae_trainer,
         "dataloaders": dataloaders,
@@ -144,7 +165,7 @@ def main(args):
         "test": args.val_batch_size,
     }
 
-    device_type = _device_type(args)
+    _ = _device_type(args)
     # device = torch.device(device_type)
 
     print(args.__dict__)

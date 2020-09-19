@@ -97,4 +97,28 @@ def plot_batch(batch, nr=2):
     return
 
 
+def plot_val_log(val_log, figsize=None, title=None):
+    if figsize is None:
+        figsize = (10, 4)
+    plt.rcParams["font.size"] = 16
+    plt.rcParams["axes.labelsize"] = 16
+    plt.rcParams["lines.linewidth"] = 2
+    fig, ax = plt.subplots(1, 2, figsize=figsize)
+    ax[0].plot(
+        val_log.train_eval_epoch, val_log.train_eval_loss, label="train_eval",
+    )
+    ax[0].plot(val_log.val_epoch, val_log.val_loss, label="val")
+    ax[0].legend()
+    t1 = "loss" if title is None else f"{title} loss"
+    ax[0].set_title(t1, size=12)
+    ax[1].plot(
+        val_log.train_eval_epoch, val_log.train_eval_mse, label="train_eval",
+    )
+    ax[1].plot(val_log.val_epoch, val_log.val_mse, label="val")
+    ax[1].legend()
+    t2 = "mse" if title is None else f"{title} mse"
+    ax[1].set_title(t2, size=12)
+    return fig, ax
+
+
 # # viz.py ends here
