@@ -63,6 +63,11 @@ def setup_function(
     network_arg_names = inspect.getfullargspec(Network).args
     network_arg_names = [x for x in network_arg_names if x != "self"]
 
+    if "cifar" in data_class.lower():
+        network_kwargs["width_height"] = 32
+    elif "mnist" in data_class.lower():
+        network_kwargs["width_height"] = 28
+
     if "in_channels" in network_arg_names:
         ravel = False
     else:
@@ -300,7 +305,6 @@ def main(args):
         duration = util.get_hms(t1 - t0)
         print("Set-up duration:", duration)
     print("Total set-up duration:", util.get_hms(t1 - t00))
-    __import__("pdb").set_trace()
 
     if args.train:
         tstamp = util.get_tstamp()

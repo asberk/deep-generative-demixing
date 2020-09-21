@@ -13,10 +13,28 @@ parser = ArgumentParser(
     description="Train two VAEs as generators, each on a separate MNIST digit."
 )
 parser.add_argument(
-    "--digit1", type=int, default=1, help="first digit class (default: 1)"
+    "--data-class1",
+    type=str,
+    default="MNISTSubset",
+    help="Type of dataset to use - FMNISTSubset, CIFAR10Subset or MNISTSubset (default).",
 )
 parser.add_argument(
-    "--digit2", type=int, default=8, help="second digit class (default: 8)"
+    "--data-class2",
+    type=str,
+    default="MNISTSubset",
+    help="Type of dataset to use - FMNISTSubset, CIFAR10Subset or MNISTSubset (default).",
+)
+parser.add_argument(
+    "--image-class1",
+    type=int,
+    default=1,
+    help="Image class for data-class1 (default: 1)",
+)
+parser.add_argument(
+    "--image-class2",
+    type=int,
+    default=8,
+    help="Image class for data-class2 (default: 8)",
 )
 parser.add_argument(
     "--train-batch-size",

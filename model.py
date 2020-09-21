@@ -280,9 +280,17 @@ class FullyConnectedVAE(nn.Module):
 
 
 class CNN_VAE(nn.Module):
-    def __init__(self, in_channels, latent_features, device):
+    def __init__(self, in_channels, latent_features, device, width_height=28):
         """
-        CNN variant of a variational autoencoder.
+        CNN variant of a variational autoencoder. 
+
+        Input : (N, C_in, H_in, W_in)
+        Output: (N, C_out, H_out, W_out)
+        where
+        H_out = (H_in−1)×stride[0] − 2×padding[0]
+              + dilation[0]×(kernel_size[0]−1) + output_padding[0]+1
+        W_out = (W_in−1)×stride[1] − 2×padding[1]
+              + dilation[1]×(kernel_size[1]−1) + output_padding[1]+1
 
         encode
         ---------------------------
@@ -305,6 +313,18 @@ class CNN_VAE(nn.Module):
         torch.Size([1, 16, 20, 20])          ⤸
         torch.Size([1, 16, 26, 26])          ⤸
         torch.Size([1, in_channels, 28, 28])
+
+
+        Parameters
+        ----------
+        in_channels: int
+            Number of channels in image
+        latent_features: int
+            Number of latent features for encoding
+        device: str
+            'cpu' or 'cuda'
+        width_height: int
+            either 28 or 32 (for MNIST/FMIST or CIFAR, respectively).
         """
         super().__init__()
 
@@ -316,13 +336,20 @@ class CNN_VAE(nn.Module):
         self.lin2 = nn.Linear(2 * latent_features, latent_features)
 
         self.lin3 = nn.Linear(latent_features, 32 * 2 * 2)
-        self.convt1 = nn.ConvTranspose2d(32, 32, (4, 4), dilation=2, stride=1)
-        self.convt2 = nn.ConvTranspose2d(32, 32, (4, 4), dilation=2, stride=1)
-        self.convt3 = nn.ConvTranspose2d(32, 16, (4, 4), dilation=2, stride=1)
-        self.convt4 = nn.ConvTranspose2d(16, 16, (4, 4), dilation=2, stride=1)
-        self.convt5 = nn.ConvTranspose2d(
-            16, in_channels, (3, 3), dilation=1, stride=1
-        )
+        self.convt1 = nn.ConvTranspose2d(32, 32, (4, 4), dilation=2)
+        self.convt2 = nn.ConvTranspose2d(32, 32, (4, 4), dilation=2)
+        self.convt3 = nn.ConvTranspose2d(32, 16, (4, 4), dilation=2)
+        self.convt4 = nn.ConvTranspose2d(16, 16, (4, 4), dilation=2)
+        self.convt5 = self._get_final_decode_layer(in_channels, width_height)
+
+    def _get_final_decode_layer(self, in_channels, width_height=28):
+        if width_height == 32:
+            return nn.ConvTranspose2d(16, in_channels, (4, 4), dilation=2)
+        if width_height == 28:
+            return nn.ConvTranspose2d(16, in_channels, (3, 3))
+        else:
+            emsg = f"Expected 28 or 32 for width_height; got {width_height}"
+            raise ValueError(emsg)
 
     def encode(self, input):
         X = torch.max_pool2d(torch.relu(self.conv1(input)), (2, 2))

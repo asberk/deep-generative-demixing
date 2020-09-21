@@ -334,3 +334,31 @@ def get_hms(duration, str_formatted=True):
     elif str_formatted:
         return f"{int(hours):02d}:{int(minutes):02d}:{seconds:.2f}"
     return hours, minutes, seconds
+
+
+def size_helper(
+    h_in,
+    h_desired,
+    n_layers,
+    stride=1,
+    padding=0,
+    dilation=1,
+    kernel_size=3,
+    output_padding=0,
+):
+    """
+    Determines output size for ConvTranspose2d after n_layers of the same parameters.
+    """
+    h_out = h_in
+    for k in range(n_layers):
+        h_out = (
+            (h_out - 1) * stride
+            - 2 * padding
+            + dilation * (kernel_size - 1)
+            + output_padding
+            + 1
+        )
+    print(f"h_out was {h_out}; wanted {h_desired}")
+    if h_out == h_desired:
+        print("Yay!")
+    return
