@@ -10,9 +10,11 @@ class BinaryMixer:
 
         Parameters
         ----------
-        A: matrix
+        A: matrix, None or dict
             must have number of rows equal to prod(x.shape) and number of
             columns equal to prod(y.shape)
+            If A is a dict then it should have keys "x" and "y". The value of
+            the dict must be torch.Tensor objects.
         clamp: bool
             Whether to clamp output to unit interval. default: False
         device: torch.device or str
@@ -29,6 +31,12 @@ class BinaryMixer:
         if not ((self.A is None) or isinstance(self.A, dict)):
             emsg = f"expected dict for self.A but got {type(self.A)}"
             raise TypeError(emsg)
+
+        if isinstance(self.A, dict):
+            if not all(
+                isinstance(value, torch.Tensor) for value in self.A.values()
+            ):
+                raise TypeError("Require tensor for entries of dict")
 
         # deal with A being None or dict
         if self.A is None:
