@@ -187,13 +187,21 @@ def plot_results(results, figsize=(10, 5)):
         for j in range(2):
             ax[i, j].axis("off")
     ax[1, 2].axis("off")
+    fig.tight_layout()
+
+    fig2, ax2 = plt.subplots(1, 2, figsize=figsize)
+    ax2[0].imshow(mixture, cmap="gray")
+    ax2[0].set_title("Mixture")
+    ax2[1].imshow(mixture_pred, cmap="gray")
+    ax2[1].set_title("Predicted mixture")
+    ax2[0].axis("off")
+    ax2[1].axis("off")
+    fig2.tight_layout()
 
     mse_mixture = np.linalg.norm(mixture - mixture_pred) ** 2 / mixture.size
     print(f"mse_mixture: {mse_mixture:.4f}")
 
-    plt.tight_layout()
-
-    return fig, ax
+    return fig, ax, fig2, ax2
 
 
 def save_results(results, current_tstamp):
@@ -209,7 +217,8 @@ def save_results(results, current_tstamp):
     info_fpath = os.path.join(mixture_dir, "info.txt")
     log_fpath = os.path.join(mixture_dir, "log.csv")
     results_fpath = os.path.join(mixture_dir, "results.npz")
-    plot_fpath = os.path.join(mixture_dir, "results_plot.pdf")
+    plot_fpath = os.path.join(mixture_dir, "results_recovered_plot.pdf")
+    plot_fpath2 = os.path.join(mixture_dir, "results_mixture_plot.pdf")
 
     INFO = f"""Results from running demixing_problem_two_network for two generators that were trained with gd_numerics_two_network.run
 
@@ -230,9 +239,11 @@ digit_classes: {digit_classes}
     print(f"Writing arrays to\n  {results_fpath}")
     np.savez_compressed(results_fpath, **arr_dict)
 
-    fig, ax = plot_results(results)
+    fig, ax, fig2, ax2 = plot_results(results)
     print(f"Writing plot to\n  {plot_fpath}")
     fig.savefig(plot_fpath, dpi=300)
+    print(f"Writing plot to\n  {plot_fpath2}")
+    fig2.savefig(plot_fpath2, dpi=300)
     return
 
 
