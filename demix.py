@@ -23,20 +23,54 @@ class BinaryMixer:
         self._set_matrix(A)
         self.clamp = clamp
 
-    def __call__(self, x, y):
-        x_shape = x.shape
-        y_shape = y.shape
+    def _call_dict(self, x, y):
+        """ This method is to add support for two measurement matrices.
+        """
+        if not ((self.A is None) or isinstance(self.A, dict)):
+            emsg = f"expected dict for self.A but got {type(self.A)}"
+            raise TypeError(emsg)
 
+        # deal with A being None or dict
         if self.A is None:
-            assert (
-                x_shape == y_shape
-            ), f"Expected x.shape == y.shape but found {x.shape} != {y.shape}"
-            b = (x + y).to(self.device)
+            A = None
+            B = None
         else:
+            A = self.A.get("x", None)
+            B = self.A.get("y", None)
+
+        # validate shapes of x and y if no random map is used.
+        if (A is None) and (B is None):
+            if x.shape != y.shape:
+                emsg = f"Expected x.shape == y.shape but found {x.shape} != {y.shape}"
+                raise ValueError(emsg)
+
+        # Construct mappings
+        if A is None:
+            Ax = x.to(self.device)
+        else:
+            Ax = torch.matmul(A, x.view(-1, 1))
+
+        if B is None:
+            By = y.to(self.device)
+        else:
+            By = torch.matmul(B, y.view(-1, 1)).view(*Ax.shape)
+
+        # Compute result
+        b = Ax + By
+        return b
+
+    def __call__(self, x, y):
+
+        if (self.A is None) or isinstance(self.A, dict):
+            b = self._call_dict(x, y)
+        else:
+            if not isinstance(self.A, torch.Tensor):
+                emsg = f"Expected tensor for A but got {type(self.A)}"
+                raise TypeError(emsg)
             x = x.to(self.device)
             y = y.to(self.device)
-
-            b = x + torch.matmul(self.A, y.view(-1, 1)).view(*x_shape)
+            By = torch.matmul(self.A, y.view(-1, 1)).view(*x.shape)
+            b = x + By
 
         if self.clamp:
             b.clamp_(0.0, 1.0)
