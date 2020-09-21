@@ -178,10 +178,25 @@ def load_model(network: nn.Module, fpath, device=None):
     return network
 
 
-def load_saved_model_by_tstamp(tstamp, in_features, device=None):
+def load_saved_model_by_tstamp(tstamp, device=None):
+    """Uses search_for_tstamp_directory to look for tstamp recursively in
+    ./log/. Reads args.csv from the directory to obtain information about
+    network architecture. Attempts to load and return network using load_model.
+
+    Note: in_features or in_channels should be specified in network_kwargs
+    within args.csv.
+
+    Parameters
+    ----------
+    tstamp: str
+        timestamp
+    device: str
+        cpu or cuda.
+
+    """
     from model import networks
 
-    directory = os.path.join("./log", tstamp)
+    directory = search_for_tstamp_directory(tstamp)
     model_list = search_for_models(directory=directory)
     if len(model_list) > 1:
         print("Warning: found more than one model. Loading first.")
@@ -192,7 +207,7 @@ def load_saved_model_by_tstamp(tstamp, in_features, device=None):
     assert isinstance(
         network_kwargs, dict
     ), f"Error loading network_kwargs from {args_fpath}"
-    network = networks[network_name](in_features=in_features, **network_kwargs)
+    network = networks[network_name](**network_kwargs)
     network = load_model(network, model_list[0], device=device)
     return network
 

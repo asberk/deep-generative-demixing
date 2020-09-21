@@ -97,5 +97,12 @@ class VAETrainer:
             save_dir=self.paths["chkpt"],
         )
 
+    def save_args(self, args):
+        fpath = os.path.join(self.paths["log"], "args.csv")
+        save_args(
+            args, fpath,
+        )
+        print(f"Saved args to:\n  {fpath}")
+
 
 # # train_vae.py ends here

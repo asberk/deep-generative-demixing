@@ -15,7 +15,10 @@ import matplotlib.pyplot as plt
 import torch
 
 from data import load_data_fns
-from demix import demixing_problem, multi_demixing_problem
+from demix import (
+    demixing_problem_one_network,
+    multi_demixing_problem_one_network,
+)
 from util import load_saved_model_by_tstamp
 
 
@@ -174,7 +177,9 @@ def simple_demixing_example(num_iter=1000, clamp=True, seed=2020):
         mixture_encoding,
         optimizer,
         logger,
-    ) = demixing_problem(model, *images_, num_iter=num_iter, clamp=clamp)
+    ) = demixing_problem_one_network(
+        model, *images_, num_iter=num_iter, clamp=clamp
+    )
 
     _plot_images(*images_, mixture, demixed0, demixed1)
 
@@ -211,7 +216,7 @@ def three_class_demixing_example(num_iter=2000, clamp=True, seed=2020):
     images = get_n_images_from_dataloader(
         dataloaders["test"], classes, seed=seed
     )
-    multi_demix_output = multi_demixing_problem(
+    multi_demix_output = multi_demixing_problem_one_network(
         model, images, num_iter=num_iter, clamp=clamp
     )
     (

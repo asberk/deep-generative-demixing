@@ -21,10 +21,7 @@ from data import single_digit_setup
 from model import networks
 import train
 from train_vae import VAETrainer
-from util import get_tstamp, save_args, get_hms
-
-
-tstamp = get_tstamp()
+import util
 
 
 def _key_helper(key):
@@ -100,15 +97,6 @@ def setup_function(
     criterion = train.criteria[criterion_name](**criterion_kwargs)
     optim_fn = train.optimizers[optimizer_name]
     optimizer = optim_fn(network.parameters(), **optimizer_kwargs)
-    vae_trainer = VAETrainer(
-        dataloaders,
-        network,
-        criterion,
-        optimizer,
-        unflatten=(1, 28, 28),
-        auto_lr=auto_lr,
-        base_log_path=f"./log/{tstamp}",
-    )
 
     args = Namespace(
         data="single_digit_setup",
@@ -126,10 +114,8 @@ def setup_function(
         optim_fn_kwargs=optimizer_kwargs,
     )
 
-    save_args(args, os.path.join(vae_trainer.paths["log"], "args.csv"))
-
     return {
-        "trainer": vae_trainer,
+        "args": args,
         "dataloaders": dataloaders,
         "network": network,
         "criterion": criterion,
@@ -153,9 +139,9 @@ def train_networks(trainers, epochs):
         t0 = time()
         trainer.train(epochs)
         t1 = time()
-        duration = get_hms(t1 - t0)
+        duration = util.get_hms(t1 - t0)
         print("train_duration:", duration)
-    print("total_train_duration:", get_hms(t1 - t00))
+    print("total_train_duration:", util.get_hms(t1 - t00))
 
 
 def _device_type(args):
@@ -167,24 +153,53 @@ def _device_type(args):
 
 
 def main(args):
+    """
+    Parameters
+    ----------
+    args : Namespace
+
+    Returns
+    -------
+    args_ : dict
+        dict of Namespaces where keys in the dict correspond to digit class. The
+        Namespace objects house the arguments used in training the generator for
+        each digit class.
+    dataloaders : dict
+        Dataloaders used for each digit class.
+    networks : dict
+        Networks used for each digit class. Possibly trained, if
+        args.load_from_tstamp is True.
+    criteria : dict
+        Loss function used for training each generator.
+    optimizers : dict
+        Optimizer used for training each generator.
+    """
+    args.__dict__.setdefault("load_from_tstamp", False)
+    args.__dict__.setdefault("eval", False)
+    args.__dict__.setdefault("return_items", True)
+
     batch_size = {
         "train": args.train_batch_size,
         "val": args.val_batch_size,
         "test": args.val_batch_size,
     }
 
-    _ = _device_type(args)
+    device_type = _device_type(args)
     # device = torch.device(device_type)
 
     print(args.__dict__)
     network_kwargs, criterion_kwargs, optimizer_kwargs = split_args(args)
-    objects = {}
+    args_ = {}
+    dataloaders = {}
+    networks = {}
+    criteria = {}
+    optimizers = {}
     digit_classes = [args.digit1, args.digit2]
     t00 = time()
-    for digit_class in digit_classes:
+    for dc in digit_classes:
         t0 = time()
-        objects[digit_class] = setup_function(
-            digit_class,
+        output = setup_function(
+            dc,
             args.epochs,
             batch_size,
             args.auto_lr,
@@ -195,19 +210,128 @@ def main(args):
             args.optimizer,
             optimizer_kwargs,
         )
+        (
+            args_[dc],
+            dataloaders[dc],
+            networks[dc],
+            criteria[dc],
+            optimizers[dc],
+        ) = output.values()
         t1 = time()
-        duration = get_hms(t1 - t0)
+        duration = util.get_hms(t1 - t0)
         print("Set-up duration:", duration)
-    print("Total set-up duration:", get_hms(t1 - t00))
+    print("Total set-up duration:", util.get_hms(t1 - t00))
 
     if args.train:
-        trainers = {dc: objects[dc]["trainer"] for dc in digit_classes}
+        tstamp = util.get_tstamp()
+        trainers = {}
+        for dc in digit_classes:
+            trainers[dc] = VAETrainer(
+                dataloaders[dc],
+                networks[dc],
+                criteria[dc],
+                optimizers[dc],
+                unflatten=(1, 28, 28),
+                auto_lr=args.auto_lr,
+                base_log_path=f"./log/{tstamp}",
+            )
+            trainers[dc].save_args(args_[dc])
         train_networks(trainers, args.epochs)
+
+    if args.load_from_tstamp:
+        networks = {}
+        for tstamp in args.tstamps:
+            networks[tstamp] = util.load_saved_model_by_tstamp(
+                tstamp, device_type
+            )
+
+    if args.eval:
+        print(
+            "The logic for --eval is not yet completed."
+            " Do not expect results."
+        )
+        from eval_vae import build_evaluators
+
+        metrics = args.__dict__.get("metrics", None)
+        if metrics is None:
+            metrics = {}
+        dataloaders = {
+            digit_class: objects[digit_class]["dataloaders"]
+            for digit_class in digit_classes
+        }
+        vae_evaluators = build_evaluators(networks, metrics)
+        print("\n\nEval results:")
+        for key, evaluator in vae_evaluators.items():
+            for phase, loader in dataloaders[key].items():
+                evaluator.run(loader)
+                print(key, phase)
+                print(evaluator.state.metrics)
+
+    if args.return_items:
+        return args_, dataloaders, networks, criteria, optimizers
 
 
 def run(**kwargs):
+    """
+    Parameters
+    ----------
+    digit1, digit2 : int
+        Default: 1, 8 resp.
+    train_batch_size, val_batch_size : int
+        Default: 32, 128, resp.
+    network : str
+        Default: "CNN_VAE",
+    network_latent_features : int
+        Default: 128,
+    network_device : str
+    criterion : str
+        Default: "default",
+    criterion_lamda : float
+        Default: 1.0,
+    optimizer : str
+        Default: "SGD",
+    optimizer_lr : float
+        Default: 1e-5,
+    optimizer_momentum : float
+        Default: 0.9,
+    optimizer_weight_decay : float
+        Default: 1e-3,
+    epochs : int
+        Default: 200,
+    auto_lr : bool
+        Default: True,
+    train : bool
+        Default: True,
+    eval : bool
+        Whether to run code to evaluate the model on the dataloaders.
+    load_from_tstamp : bool
+        Whether to attempt to load a state_dict into the model before returning
+        it.
+    tstamps : list of str
+        Must contain a list of valid tstamps to pass to
+        util.load_saved_model_by_tstamp.
+
+    
+    Returns
+    -------
+    args_ : dict
+        dict of Namespaces where keys in the dict correspond to digit class. The
+        Namespace objects house the arguments used in training the generator for
+        each digit class.
+    dataloaders : dict
+        Dataloaders used for each digit class.
+    networks : dict
+        Networks used for each digit class. Possibly trained, if
+        args.load_from_tstamp is True.
+    criteria : dict
+        Loss function used for training each generator.
+    optimizers : dict
+        Optimizer used for training each generator.
+
+    """
     from argparse import Namespace
 
+    network_device = "cuda" if torch.cuda.is_available() else "cpu"
     args = Namespace(
         digit1=1,
         digit2=8,
@@ -215,7 +339,7 @@ def run(**kwargs):
         val_batch_size=128,
         network="CNN_VAE",
         network_latent_features=128,
-        network_device="cuda",
+        network_device=network_device,
         criterion="default",
         criterion_lamda=1.0,
         optimizer="SGD",
@@ -230,7 +354,8 @@ def run(**kwargs):
     for key, value in kwargs.items():
         args.__dict__[key] = value
 
-    main(args)
+    output = main(args)
+    return output
 
 
 if __name__ == "__main__":
@@ -239,6 +364,6 @@ if __name__ == "__main__":
     t0 = time()
     main(args)
     t1 = time()
-    print("Total duration:", get_hms(t1 - t0))
+    print("Total duration:", util.get_hms(t1 - t0))
 
 # # numerics_generative_demixing.py ends here
