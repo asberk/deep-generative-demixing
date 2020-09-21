@@ -8,7 +8,6 @@ Copyright © 2020, Aaron Berk, all rights reserved.
 Created:  9 September 2020
 
 """
-import os
 import inspect
 from argparse import Namespace
 from time import time
@@ -17,7 +16,7 @@ import numpy as np
 import torch
 
 from basic_parser import parser
-from data import single_digit_setup
+from data import single_digit_setup, single_class_setup
 from model import networks
 import train
 from train_vae import VAETrainer
@@ -48,6 +47,83 @@ def split_args(args):
 
 
 def setup_function(
+    data_class,
+    image_class,
+    max_epochs,
+    batch_size,
+    auto_lr,
+    network_name,
+    network_kwargs,
+    criterion_name,
+    criterion_kwargs,
+    optimizer_name,
+    optimizer_kwargs,
+):
+    Network = networks[network_name]
+    network_arg_names = inspect.getfullargspec(Network).args
+    network_arg_names = [x for x in network_arg_names if x != "self"]
+
+    if "in_channels" in network_arg_names:
+        ravel = False
+    else:
+        ravel = True
+
+    dataloaders, img_shape, classes = single_class_setup(
+        data_class, image_class, ravel=ravel, batch_size=batch_size
+    )
+
+    if "in_channels" in network_arg_names:
+        emsg = f"Expected images, not vectors; got img_shape = {img_shape}"
+        assert len(img_shape) >= 3, emsg
+        in_channels = img_shape[-3]
+        network_kwargs["in_channels"] = in_channels
+    elif "in_features" in network_arg_names:
+        in_features = np.prod(img_shape)
+        network_kwargs["in_features"] = in_features
+
+    for key in network_kwargs.keys():
+        if key not in network_arg_names:
+            emsg = (
+                f"Unexpected argument for Network {network_name}. "
+                f"Valid args are:\n  {network_arg_names}"
+            )
+            raise ValueError(emsg)
+
+    criterion_kwargs.setdefault("device", network_kwargs.get("device", "cpu"))
+
+    print(network_kwargs)
+    network = Network(**network_kwargs)
+    criterion = train.criteria[criterion_name](**criterion_kwargs)
+    optim_fn = train.optimizers[optimizer_name]
+    optimizer = optim_fn(network.parameters(), **optimizer_kwargs)
+
+    args = Namespace(
+        data="single_class_setup",
+        data_kwargs={
+            "data_class": data_class,
+            "image_class": image_class,
+            "ravel": ravel,
+            "batch_size": batch_size,
+        },
+        max_epochs=max_epochs,
+        network=network_name,
+        network_kwargs=network_kwargs,
+        criterion=criterion_name,
+        criterion_kwargs=criterion_kwargs,
+        optim_fn=optimizer_name,
+        optim_fn_kwargs=optimizer_kwargs,
+    )
+
+    return {
+        "args": args,
+        "dataloaders": dataloaders,
+        "network": network,
+        "criterion": criterion,
+        "optimizer": optimizer,
+    }
+
+
+def digit_setup_function(
     digit_class,
     max_epochs,
     batch_size,
@@ -194,12 +270,14 @@ def main(args):
     networks = {}
     criteria = {}
     optimizers = {}
-    digit_classes = [args.digit1, args.digit2]
+    data_classes = [args.data_class1, args.data_class2]
+    image_classes = [args.image_class1, args.image_class2]
     t00 = time()
-    for dc in digit_classes:
+    for data_class, image_class in zip(data_classes, image_classes):
         t0 = time()
         output = setup_function(
-            dc,
+            data_class,
+            image_class,
             args.epochs,
             batch_size,
             args.auto_lr,
@@ -210,32 +288,38 @@ def main(args):
             args.optimizer,
             optimizer_kwargs,
         )
+        key = (data_class, image_class)
         (
-            args_[dc],
-            dataloaders[dc],
-            networks[dc],
-            criteria[dc],
-            optimizers[dc],
+            args_[key],
+            dataloaders[key],
+            networks[key],
+            criteria[key],
+            optimizers[key],
         ) = output.values()
         t1 = time()
         duration = util.get_hms(t1 - t0)
         print("Set-up duration:", duration)
     print("Total set-up duration:", util.get_hms(t1 - t00))
+    __import__("pdb").set_trace()
 
     if args.train:
         tstamp = util.get_tstamp()
         trainers = {}
-        for dc in digit_classes:
-            trainers[dc] = VAETrainer(
-                dataloaders[dc],
-                networks[dc],
-                criteria[dc],
-                optimizers[dc],
-                unflatten=(1, 28, 28),
+        for key in args_.keys():
+            for batch in dataloaders[key]["train"]:
+                img_shape = tuple(batch[0].shape[1:])
+                break
+
+            trainers[key] = VAETrainer(
+                dataloaders[key],
+                networks[key],
+                criteria[key],
+                optimizers[key],
+                unflatten=img_shape,
                 auto_lr=args.auto_lr,
                 base_log_path=f"./log/{tstamp}",
             )
-            trainers[dc].save_args(args_[dc])
+            trainers[key].save_args(args_[key])
         train_networks(trainers, args.epochs)
 
     if args.load_from_tstamp:
@@ -255,10 +339,6 @@ def main(args):
         metrics = args.__dict__.get("metrics", None)
         if metrics is None:
             metrics = {}
-        dataloaders = {
-            digit_class: objects[digit_class]["dataloaders"]
-            for digit_class in digit_classes
-        }
         vae_evaluators = build_evaluators(networks, metrics)
         print("\n\nEval results:")
         for key, evaluator in vae_evaluators.items():
@@ -311,7 +391,7 @@ def run(**kwargs):
         Must contain a list of valid tstamps to pass to
         util.load_saved_model_by_tstamp.
 
-    
+
     Returns
     -------
     args_ : dict
@@ -333,8 +413,10 @@ def run(**kwargs):
 
     network_device = "cuda" if torch.cuda.is_available() else "cpu"
     args = Namespace(
-        digit1=1,
-        digit2=8,
+        data_class1="MNISTSubset",
+        data_class2="MNISTSubset",
+        image_class1=1,
+        image_class2=8,
         train_batch_size=32,
         val_batch_size=128,
         network="CNN_VAE",

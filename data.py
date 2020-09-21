@@ -1,6 +1,5 @@
 import numpy as np
-import torch
-from torch.utils.data import Subset, Dataset, DataLoader
+from torch.utils.data import Subset, DataLoader
 from torchvision import datasets, transforms
 
 DATA_DIR = "./data/"
@@ -77,7 +76,91 @@ class FMNISTSubset(datasets.mnist.FashionMNIST):
         self.class_2_idx = {key: i for i, key in enumerate(class_2_idx.keys())}
 
 
+class CIFAR10Subset(datasets.cifar.CIFAR10):
+    def __init__(
+        self,
+        root,
+        train=True,
+        transform=None,
+        target_transform=None,
+        download=False,
+        classes=None,
+    ):
+        super().__init__(root, train, transform, target_transform, download)
+
+        if classes is not None:
+            if not isinstance(classes, (tuple, list)):
+                classes = [classes]
+
+            indices = [i for i, n in enumerate(self.targets) if n in classes]
+            self.targets = [self.targets[i] for i in indices]
+            self.data = self.data[indices]
+            self._reset_classes(classes)
+        else:
+            self.class_2_idx = {key: i for i, key in enumerate(self.classes)}
+
+    def _reset_classes(self, classes):
+        self.classes = [self.classes[c] for c in classes]
+        class_2_idx = {
+            key: value
+            for key, value in self.class_to_idx.items()
+            if key in self.classes
+        }
+        self.class_2_idx = {key: i for i, key in enumerate(class_2_idx.keys())}
+
+
+DataSubsetClasses = {
+    "MNISTSubset": MNISTSubset,
+    "FMNISTSubset": FMNISTSubset,
+    "CIFAR10Subset": CIFAR10Subset,
+}
+
+
+def load_data_subsets(data_class, data_dir=None, transform=None, classes=None):
+    """
+    Parameters
+    ----------
+    cls: type
+        Should be something like MNISTSubset, CIFAR10Subset or FMNISTSubset
+    data_dir: str
+    transform: torchvision.transforms.Transform
+        Default: torchvision.transforms.ToTensor()
+    classes: list or int
+        The class subset to return (e.g., ones and eights for MNISTSubset)
+
+    Returns
+    -------
+    dset_train, dset_test
+    """
+    if data_dir is None:
+        data_dir = DATA_DIR
+    if transform is None:
+        transform = transforms.ToTensor()
+
+    if isinstance(data_class, str):
+        if data_class not in DataSubsetClasses.keys():
+            raise ValueError(f"string {data_class} not recognized")
+        data_class = DataSubsetClasses[data_class]
+
+    dset_train = data_class(
+        data_dir,
+        train=True,
+        transform=transform,
+        download=True,
+        classes=classes,
+    )
+    dset_test = data_class(
+        data_dir,
+        train=False,
+        transform=transform,
+        download=True,
+        classes=classes,
+    )
+    return dset_train, dset_test
+
+
 def load_mnist_datasets(data_dir=None, transform=None, classes=None):
+    print("Deprecated: Use load_data_subsets(MNISTSubset, ...) instead")
     if data_dir is None:
         data_dir = DATA_DIR
     if transform is None:
@@ -101,6 +184,7 @@ def load_mnist_datasets(data_dir=None, transform=None, classes=None):
 
 
 def load_fmnist_datasets(data_dir=None, transform=None, classes=None):
+    print("Deprecated: Use load_data_subsets(FMNISTSubset, ...) instead")
     if data_dir is None:
         data_dir = DATA_DIR
     if transform is None:
@@ -153,7 +237,7 @@ def get_partitioned_datasets(
     if "test" in phases:
         assert (
             dset_holdout is not None
-        ), f"Expected dset_holdout if 'test' in `phases`."
+        ), "Expected dset_holdout if 'test' in `phases`."
         ret["test"] = dset_holdout
 
     dev_size = len(dset_dev)
@@ -263,6 +347,46 @@ def basic_1_8_setup(ravel=True, batch_size=128):
     return dataloaders, img_shape, classes
 
 
+def single_class_setup(data_class, image_class, ravel=False, batch_size=128):
+    """
+    Datasets and dataloaders with 1 image class only.
+
+    Parameters
+    ----------
+    data_class: type
+        e.g., MNISTSubset, FMNISTSubset or CIFAR10Subset
+    image_class: int or str
+        The image class. If int, should satisfy 0 <= img_class <= 9. If str,
+        must be one of:
+        airplane, automobile, bird, cat, deer, dog, frog, horse, ship, truck.
+    ravel: bool
+    batch_size: int
+
+    Returns
+    -------
+    datasets : dict
+        keys: ["train", "train_eval", "val", "test"]
+        proportions: [ 80% dev, 50% train, 20% dev, 100% holdout ]
+    dataloaders : dict
+        batch_size: {"train" : 16, "train_eval": 128, "val": 128, "test": 128}
+        shuffle: {"train" : True, "train_eval": False, "val": False, "test": False}
+    """
+    if ravel:
+        on_load_transform = transforms.Compose(
+            [transforms.ToTensor(), transforms.Lambda(lambda x: x.view(-1))]
+        )
+    else:
+        on_load_transform = transforms.ToTensor()
+    dset_dev, dset_ho = load_data_subsets(
+        data_class, transform=on_load_transform, classes=[image_class]
+    )
+    datasets = get_partitioned_datasets(dset_dev, dset_ho)
+    dataloaders = get_dataloaders(datasets, batch_size=batch_size)
+    img_shape = datasets["train"][0][0].size()
+    classes = np.unique(datasets["train"].targets)
+    return dataloaders, img_shape, classes
+
+
 def single_digit_setup(digit_class=1, ravel=True, batch_size=128):
     """
     Datasets and dataloaders with 1 digit class only.
@@ -332,7 +456,7 @@ def basic_fmnist_setup(ravel=False, batch_size=128):
     Parameters
     ----------
     ravel: bool
-        Whether to return images or images ravelled as vectors. 
+        Whether to return images or images ravelled as vectors.
     batch_size: int
         training batch_size.
 
