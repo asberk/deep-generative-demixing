@@ -145,66 +145,85 @@ def run_demixing(**kwargs):
     results = demixing_problem_two_network(
         networks, imgs, A, num_iter=num_iter, clamp=clamp, device=device
     )
+    results["phase"] = phase
+    results["seed"] = seed
+    results["tstamps"] = tstamps
+    results["clamp"] = clamp
+    results["num_iter"] = num_iter
     results["A"] = A
     results["networks"] = networks
     results["imgs"] = imgs
     return results
 
 
-def plot_results(results, figsize=(10, 5)):
-    """Plots the results of run_demixing.
-
+def save_image_dict_plots(image_dict, figsize=(5, 5), **kwargs):
+    """Plots the results of run_demixing and saves them.
 
     Parameters
     ----------
-    results : dict
-        Output of run_demixing
+    image_dict: dict of arrays
+        all values are assumed to be images that need to be plotted, except for
+        the key 'logger', which assumed to be a util.Logger instance with keys
+        'iter' and 'loss'.
+    figsize: tuple
+        figure size for each of the individual figures
+        Note: figsize for logger loss plot: 
+            (figsize[1] * 2 ** 0.5, figsize[1] / 2 ** 0.5)
+    plot_fpath : str
+        Must have "{key}" in plot_fpath so that formatter can embed key of
+        image_dict into plot name. Default: plot_{key}.pdf
+    savefig_kwargs : dict
+        Other args to fig.savefig, like dpi.
 
+    Returns
+    -------
+    out : dict
+        Has keys same as image_dict, except for 'logger' which is renamed to
+        'loss' (if present). Each key contains a `fig` object.
     """
-    demixed0 = results["demixed0"].detach().squeeze().cpu().numpy()
-    demixed1 = results["demixed1"].detach().squeeze().cpu().numpy()
-    logger = results["logger"]
-    mixture = results["mixture"].detach().squeeze().cpu().numpy()
-    mixture_pred = results["mixture_pred"].detach().squeeze().cpu().numpy()
-    x0 = results["x0"].detach().squeeze().cpu().numpy()
-    x1 = results["x1"].detach().squeeze().cpu().numpy()
+    plot_fpath = kwargs.pop("plot_fpath", "plot_{key}.pdf")
+    kwargs.setdefault("dpi", 300)
+    kwargs.setdefault("bbox_inches", "tight")
+    kwargs.setdefault("pad_inches", 0.1)
 
-    fig, ax = plt.subplots(2, 3, figsize=figsize)
-    ax[0, 0].imshow(x0, cmap="gray")
-    ax[0, 1].imshow(demixed0, cmap="gray")
-    ax[1, 0].imshow(x1, cmap="gray")
-    ax[1, 1].imshow(demixed1, cmap="gray")
-    ax[0, 2].plot(logger["iter"], logger["loss"])
-    ax[0, 2].set_ylabel("MSE")
-    ax[0, 2].set_xlabel("iter")
-    ax[0, 2].set_yscale("log")
+    logger = image_dict.pop("logger", None)
+    out = {}
+    for key, image in image_dict.items():
+        if key == "logger":
+            continue
+        fig, ax = plt.subplots(1, 1, figsize=figsize)
+        ax.imshow(image, cmap="gray")
+        ax.axis("off")
+        fig.tight_layout()
+        plot_fpath_ = plot_fpath.format(key=key)
+        print(f"\nWriting plot to\n  {plot_fpath_}")
+        fig.savefig(plot_fpath_, **kwargs)
 
-    titles = ["true", "recovered"]
-    for j in range(2):
-        ax[0, j].set_title(titles[j])
-
-    for i in range(2):
-        for j in range(2):
-            ax[i, j].axis("off")
-    ax[1, 2].axis("off")
-    fig.tight_layout()
-
-    fig2, ax2 = plt.subplots(1, 2, figsize=figsize)
-    ax2[0].imshow(mixture, cmap="gray")
-    ax2[0].set_title("Mixture")
-    ax2[1].imshow(mixture_pred, cmap="gray")
-    ax2[1].set_title("Predicted mixture")
-    ax2[0].axis("off")
-    ax2[1].axis("off")
-    fig2.tight_layout()
-
-    mse_mixture = np.linalg.norm(mixture - mixture_pred) ** 2 / mixture.size
-    print(f"mse_mixture: {mse_mixture:.4f}")
-
-    return fig, ax, fig2, ax2
+    if logger is not None:
+        plt.rcParams["axes.labelsize"] = 14
+        plt.rcParams["font.size"] = 14
+        plt.rcParams["lines.linewidth"] = 2
+        log_figsize = (figsize[1] * 2 ** 0.5, figsize[1] / 2 ** 0.5)
+        fig, ax = plt.subplots(1, 1, figsize=log_figsize)
+        ax.plot(logger["iter"], logger["loss"])
+        ax.set_ylabel("MSE")
+        ax.set_xlabel("iter")
+        ax.set_yscale("log")
+        fig.tight_layout()
+        plot_fpath_ = plot_fpath.format(key="loss")
+        print(f"\nWriting plot to\n  {plot_fpath_}")
+        fig.savefig(plot_fpath_, **kwargs)
 
 
-def save_results(results, current_tstamp):
+def save_results(results, current_tstamp, figsize=(5, 5)):
+    """
+    Takes results and generates:
+    - info.csv : information about the networks and data used in the demixing setup
+    - log.csv
+    - results.npz
+    - results_recovered_plot.pdf
+    - results_mixture_plot.pdf
+    """
     tstamps = list(results["networks"].keys())
     digit_classes = list(results["imgs"].keys())
 
@@ -217,14 +236,44 @@ def save_results(results, current_tstamp):
     info_fpath = os.path.join(mixture_dir, "info.txt")
     log_fpath = os.path.join(mixture_dir, "log.csv")
     results_fpath = os.path.join(mixture_dir, "results.npz")
-    plot_fpath = os.path.join(mixture_dir, "results_recovered_plot.pdf")
-    plot_fpath2 = os.path.join(mixture_dir, "results_mixture_plot.pdf")
+    plot_fpath = os.path.join(mixture_dir, "results_{key}_plot.pdf")
+
+    def _fmt_tens(tens):
+        return tens.detach().squeeze().cpu().numpy()
+
+    image_dict = {
+        "true0": _fmt_tens(results["x0"]),
+        "recovered0": _fmt_tens(results["demixed0"]),
+        "true1": _fmt_tens(results["x1"]),
+        "recovered1": _fmt_tens(results["demixed1"]),
+        "mixture": _fmt_tens(results["mixture"]),
+        "mixture_pred": _fmt_tens(results["mixture_pred"]),
+        "logger": results["logger"],
+    }
+
+    err0 = image_dict["true0"] - image_dict["recovered0"]
+    err1 = image_dict["true1"] - image_dict["recovered1"]
+    err_mixture = image_dict["mixture"] - image_dict["mixture_pred"]
+    mse0 = np.linalg.norm(err0) ** 2 / err0.size
+    mse1 = np.linalg.norm(err1) ** 2 / err1.size
+    mse_mixture = np.linalg.norm(err_mixture) ** 2 / err_mixture.size
 
     INFO = f"""Results from running demixing_problem_two_network for two generators that were trained with gd_numerics_two_network.run
 
 current_tstamp: {current_tstamp}
+
 tstamps: {tstamps}
 digit_classes: {digit_classes}
+phase: {results['phase']}
+
+seed: {results['seed']}
+A_shape: {results['A'].shape}
+clamp: {results['clamp']}
+num_iter: {results['num_iter']}
+
+mse_img_0: {mse0:.3e}
+mse_img_1: {mse1:.3e}
+mse_mixture: {mse_mixture:.3e}
 """
     print(f"Writing info to\n  {info_fpath}")
     with open(info_fpath, "w") as fp:
@@ -234,16 +283,20 @@ digit_classes: {digit_classes}
     logger.save(log_fpath)
 
     arr_dict = {}
-    for key in ["demixed0", "demixed1", "mixture", "mixture_pred", "x0", "x1"]:
+    for key in [
+        "A",
+        "demixed0",
+        "demixed1",
+        "mixture",
+        "mixture_pred",
+        "x0",
+        "x1",
+    ]:
         arr_dict[key] = results[key].detach().squeeze().cpu().numpy()
     print(f"Writing arrays to\n  {results_fpath}")
     np.savez_compressed(results_fpath, **arr_dict)
 
-    fig, ax, fig2, ax2 = plot_results(results)
-    print(f"Writing plot to\n  {plot_fpath}")
-    fig.savefig(plot_fpath, dpi=300)
-    print(f"Writing plot to\n  {plot_fpath2}")
-    fig2.savefig(plot_fpath2, dpi=300)
+    save_image_dict_plots(image_dict, figsize=figsize, plot_fpath=plot_fpath)
     return
 
 
