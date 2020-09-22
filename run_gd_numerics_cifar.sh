@@ -2,7 +2,7 @@
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=64000M
-#SBATCH --time=1:30:00
+#SBATCH --time=00:30:00
 #SBATCH --account=def-yaniv
 #SBATCH --mail-user=aberk@math.ubc.ca
 #SBATCH --mail-type=ALL
@@ -30,7 +30,7 @@ else
     echo " --data-class1=CIFAR10Subset --image-class1=0 --data-class2=CIFAR10Subset --image-class2=3 --network=CNN_VAE --network-latent-features=128 --network-device=cuda"
     echo "($DATE)"
     echo ""
-    python3 gd_numerics_two_network.py --data-class1=CIFAR10Subset --image-class1=0 --data-class2=CIFAR10Subset --image-class2=3 --network=CNN_VAE --network-latent-features=128 --network-device=cuda
+    python3 gd_numerics_two_network.py --data-class1=CIFAR10Subset --image-class1=0 --data-class2=CIFAR10Subset --image-class2=3 --network=CNN_VAE --network-latent-features=128 --network-device=cuda --optimizer-lr=1e-4
 fi
 
 echo "Complete."

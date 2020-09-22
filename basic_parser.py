@@ -76,7 +76,7 @@ parser.add_argument(
     "--optimizer", type=str, default="SGD", help="default='SGD'",
 )
 parser.add_argument(
-    "--optimizer-lr", type=float, default=1e-5, help="default=None",
+    "--optimizer-lr", type=float, default=1e-5, help="default=1e-5",
 )
 parser.add_argument(
     "--optimizer-momentum", type=float, default=0.9, help="default=0.9",

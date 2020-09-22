@@ -2,11 +2,11 @@
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=64000M
-#SBATCH --time=1:30:00
+#SBATCH --time=00:30:00
 #SBATCH --account=def-yaniv
 #SBATCH --mail-user=aberk@math.ubc.ca
 #SBATCH --mail-type=ALL
-#SBATCH --output=%u_%j_gd_cnn_vae_cifar.out
+#SBATCH --output=%u_%j_gd_cnn_vae_cifar_mnist.out
 export OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK
 
 echo ""
@@ -27,10 +27,10 @@ else
     DATE=$(date "+%Y-%m-%d")
     echo "running script:"
     echo "  gd_numerics_two_network.py"
-    echo "--data-class1=CIFAR10Subset --image-class1=2 --data-class2=MNISTSubset --image-class2=0 --network=CNN_VAE --network-latent-features=128 --network-device=cuda"
+    echo "--data-class1=CIFAR10Subset --image-class1=2 --data-class2=MNISTSubset --image-class2=0 --network=CNN_VAE --network-latent-features=128 --network-device=cuda --optimizer-lr=1e-4"
     echo "($DATE)"
     echo ""
-    python3 gd_numerics_two_network.py --data-class1=CIFAR10Subset --image-class1=2 --data-class2=MNISTSubset --image-class2=0 --network=CNN_VAE --network-latent-features=128 --network-device=cuda
+    python3 gd_numerics_two_network.py --data-class1=CIFAR10Subset --image-class1=2 --data-class2=MNISTSubset --image-class2=0 --network=CNN_VAE --network-latent-features=128 --network-device=cuda --optimizer-lr=1e-4
 fi
 
 echo "Complete."
