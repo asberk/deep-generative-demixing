@@ -15,7 +15,7 @@ import matplotlib.pyplot as plt
 import torch
 from torchvision.utils import save_image
 
-from util import get_tstamp
+from util import get_tstamp, load_val_log, search_for_tstamp_directory
 
 
 def plot_random_images(dataset, k=8, nr=2, figsize=None):
@@ -98,27 +98,62 @@ def plot_batch(batch, nr=2):
 
 
 def plot_val_log(val_log, figsize=None, title=None):
+    """
+    Note: train_eval is labelled as train
+    """
     if figsize is None:
         figsize = (10, 4)
     plt.rcParams["font.size"] = 16
     plt.rcParams["axes.labelsize"] = 16
     plt.rcParams["lines.linewidth"] = 2
     fig, ax = plt.subplots(1, 2, figsize=figsize)
+    # train_eval
     ax[0].plot(
-        val_log.train_eval_epoch, val_log.train_eval_loss, label="train_eval",
+        val_log.train_eval_epoch, val_log.train_eval_loss, label="train",
     )
     ax[0].plot(val_log.val_epoch, val_log.val_loss, label="val")
     ax[0].legend()
     t1 = "loss" if title is None else f"{title} loss"
     ax[0].set_title(t1, size=12)
     ax[1].plot(
-        val_log.train_eval_epoch, val_log.train_eval_mse, label="train_eval",
+        val_log.train_eval_epoch, val_log.train_eval_mse, label="train",
     )
     ax[1].plot(val_log.val_epoch, val_log.val_mse, label="val")
     ax[1].legend()
     t2 = "mse" if title is None else f"{title} mse"
     ax[1].set_title(t2, size=12)
     return fig, ax
+
+
+def plot_val_log_from_tstamp(
+    tstamp, fname=None, figsize=None, title=None, savefig_kwargs=None
+):
+    """
+    Parameters
+    ----------
+    tstamp: str
+    fname: str (optional)
+        Default: val_log_plot.pdf
+    figsize: tuple (optional)
+        Default: (10, 4)
+    title: str (optional)
+    savefig_kwargs: dict (optional)
+        Default: {dpi: 300, bbox_inches: "tight"}
+
+    """
+    directory = search_for_tstamp_directory(tstamp)
+    val_log = load_val_log(directory)
+    fig, ax = plot_val_log(val_log, figsize=figsize, title=title)
+    fig.tight_layout()
+
+    if savefig_kwargs is None:
+        savefig_kwargs = {}
+    savefig_kwargs.setdefault("dpi", 300)
+    savefig_kwargs.setdefault("bbox_inches", "tight")
+    if fname is None:
+        fname = "val_log_plot.pdf"
+    fpath = os.path.join(directory, fname)
+    fig.savefig(fpath, **savefig_kwargs)
 
 
 # # viz.py ends here

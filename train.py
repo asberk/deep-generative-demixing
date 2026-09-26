@@ -38,7 +38,7 @@ def get_default_autoencoder_loss(lamda=None, device=None):
         BCE = F.binary_cross_entropy(x_recon, x_true, reduction="sum")
         KLD = mu.pow(2) + log_var.exp() - log_var - 1
         KLD = KLD.mul_(0.5).sum()
-        print(f"batch loss :: BCE: {BCE:.3e}  KLD: {KLD:.3e}")
+        # print(f"batch loss :: BCE: {BCE:.3e}  KLD: {KLD:.3e}")
         return BCE + lamda * KLD
 
     return loss_fn

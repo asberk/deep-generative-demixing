@@ -347,9 +347,8 @@ class CNN_VAE(nn.Module):
             return nn.ConvTranspose2d(16, in_channels, (4, 4), dilation=2)
         if width_height == 28:
             return nn.ConvTranspose2d(16, in_channels, (3, 3))
-        else:
-            emsg = f"Expected 28 or 32 for width_height; got {width_height}"
-            raise ValueError(emsg)
+        emsg = f"Expected 28 or 32 for width_height; got {width_height}"
+        raise ValueError(emsg)
 
     def encode(self, input):
         X = torch.max_pool2d(torch.relu(self.conv1(input)), (2, 2))

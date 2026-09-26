@@ -362,3 +362,23 @@ def size_helper(
     if h_out == h_desired:
         print("Yay!")
     return
+
+
+def _print_entry(column, entry, indent=0, file=None):
+    if isinstance(entry, str) and ("{" in entry):
+        _print_entry(column, eval(entry), indent, file)
+        return
+    INDENT = " " * indent
+    if isinstance(entry, dict):
+        print(f"{INDENT}{column}:", file=file)
+        for key, value in entry.items():
+            _print_entry(key, value, indent + 2, file)
+        return
+    print(f"{INDENT}{column}:", entry, file=file)
+
+
+def pretty_print_args_csv(tstamp, file=None):
+    directory = search_for_tstamp_directory(tstamp)
+    df = pd.read_csv(os.path.join(directory, "args.csv"))
+    for column in df.columns:
+        _print_entry(column, df.loc[0, column], file=file)

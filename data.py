@@ -5,6 +5,17 @@ from torchvision import datasets, transforms
 DATA_DIR = "./data/"
 
 
+def get_basic_load_transform():
+    return transforms.Compose(
+        [
+            transforms.RandomCrop((28, 28)),
+            transforms.RandomHorizontalFlip(),
+            transforms.RandomVerticalFlip(),
+            transforms.ToTensor(),
+        ]
+    )
+
+
 class MNISTSubset(datasets.mnist.MNIST):
     def __init__(
         self,
@@ -65,9 +76,7 @@ class FMNISTSubset(datasets.mnist.FashionMNIST):
             self.class_2_idx = {key: i for i, key in enumerate(self.classes)}
 
     def _reset_classes(self, classes):
-        self.classes = [
-            entry for entry in self.classes if int(entry[0]) in classes
-        ]
+        self.classes = [self.classes[c] for c in classes]
         class_2_idx = {
             key: value
             for key, value in self.class_to_idx.items()
@@ -347,7 +356,9 @@ def basic_1_8_setup(ravel=True, batch_size=128):
     return dataloaders, img_shape, classes
 
 
-def single_class_setup(data_class, image_class, ravel=False, batch_size=128):
+def single_class_setup(
+    data_class, image_class, ravel=False, batch_size=128, on_load_transform=None
+):
     """
     Datasets and dataloaders with 1 image class only.
 
@@ -371,14 +382,60 @@ def single_class_setup(data_class, image_class, ravel=False, batch_size=128):
         batch_size: {"train" : 16, "train_eval": 128, "val": 128, "test": 128}
         shuffle: {"train" : True, "train_eval": False, "val": False, "test": False}
     """
-    if ravel:
-        on_load_transform = transforms.Compose(
-            [transforms.ToTensor(), transforms.Lambda(lambda x: x.view(-1))]
-        )
-    else:
-        on_load_transform = transforms.ToTensor()
+    if on_load_transform is None:
+        if ravel:
+            on_load_transform = transforms.Compose(
+                [transforms.ToTensor(), transforms.Lambda(lambda x: x.view(-1))]
+            )
+        else:
+            on_load_transform = transforms.ToTensor()
+
     dset_dev, dset_ho = load_data_subsets(
         data_class, transform=on_load_transform, classes=[image_class]
+    )
+    datasets = get_partitioned_datasets(dset_dev, dset_ho)
+    dataloaders = get_dataloaders(datasets, batch_size=batch_size)
+    img_shape = datasets["train"][0][0].size()
+    classes = np.unique(datasets["train"].targets)
+    return dataloaders, img_shape, classes
+
+
+def all_class_setup(
+    data_class, ravel=False, batch_size=128, on_load_transform=None
+):
+    """
+    Datasets and dataloaders with 1 image class only.
+
+    Parameters
+    ----------
+    data_class: type
+        e.g., MNISTSubset, FMNISTSubset or CIFAR10Subset
+    image_class: int or str
+        The image class. If int, should satisfy 0 <= img_class <= 9. If str,
+        must be one of:
+        airplane, automobile, bird, cat, deer, dog, frog, horse, ship, truck.
+    ravel: bool
+    batch_size: int
+
+    Returns
+    -------
+    datasets : dict
+        keys: ["train", "train_eval", "val", "test"]
+        proportions: [ 80% dev, 50% train, 20% dev, 100% holdout ]
+    dataloaders : dict
+        batch_size: {"train" : 16, "train_eval": 128, "val": 128, "test": 128}
+        shuffle: {"train" : True, "train_eval": False, "val": False, "test": False}
+    """
+    if on_load_transform is None:
+        if ravel:
+            on_load_transform = transforms.Compose(
+                [transforms.ToTensor(), transforms.Lambda(lambda x: x.view(-1))]
+            )
+        else:
+            on_load_transform = transforms.ToTensor()
+
+    dset_dev, dset_ho = load_data_subsets(
+        data_class, transform=on_load_transform, classes=None
     )
     datasets = get_partitioned_datasets(dset_dev, dset_ho)
     dataloaders = get_dataloaders(datasets, batch_size=batch_size)
